@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="hu">
+<head>
+    <meta charset="utf-8">
+    <title>CarCOM Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="app-shell">
+    <aside class="sidebar">
+        <div class="brand">CarCOM</div>
+        <nav>
+            <a class="active" href="/">Köztes adatréteg</a>
+            <a href="#">Szinkron futások</a>
+            <a href="#">Validációs hibák</a>
+            <a href="#">Beállítások</a>
+        </nav>
+    </aside>
+
+    <main class="main">
+        <header class="topbar">
+            <div>
+                <h1>Köztes adatréteg</h1>
+                <p>Normalizált pénzügyi tranzakciók a Kocsiguru Google Sheet alapján.</p>
+            </div>
+
+            <form method="post" action="/sync">
+                <button class="primary-button" type="submit">Szinkron futtatása</button>
+            </form>
+        </header>
+
+        <section class="cards">
+            <div class="card">
+                <span>Összes tranzakció</span>
+                <strong>{{ total_count }}</strong>
+            </div>
+
+            {% for item in status_summary %}
+            <div class="card">
+                <span>{{ item.normalized_status }}</span>
+                <strong>{{ item.count }}</strong>
+            </div>
+            {% endfor %}
+        </section>
+
+        <section class="panel">
+            <form class="filters" method="get">
+                <input
+                    type="text"
+                    name="search"
+                    placeholder="Keresés: autó, ügyfél, közlemény, ID..."
+                    value="{{ search }}"
+                >
+
+                <select name="transaction_type">
+                    <option value="">Minden típus</option>
+                    <option value="PURCHASE" {% if transaction_type == "PURCHASE" %}selected{% endif %}>Vétel</option>
+                    <option value="SALE" {% if transaction_type == "SALE" %}selected{% endif %}>Eladás</option>
+                    <option value="SALE_STOCK_90_DAYS" {% if transaction_type == "SALE_STOCK_90_DAYS" %}selected{% endif %}>Eladás készlet 90 nap</option>
+                    <option value="OTHER" {% if transaction_type == "OTHER" %}selected{% endif %}>Egyéb</option>
+                    <option value="UNKNOWN" {% if transaction_type == "UNKNOWN" %}selected{% endif %}>Ismeretlen</option>
+                </select>
+
+                <select name="normalized_status">
+                    <option value="">Minden státusz</option>
+                    <option value="VALID" {% if normalized_status == "VALID" %}selected{% endif %}>VALID</option>
+                    <option value="WARNING" {% if normalized_status == "WARNING" %}selected{% endif %}>WARNING</option>
+                    <option value="INVALID" {% if normalized_status == "INVALID" %}selected{% endif %}>INVALID</option>
+                </select>
+
+                <select name="sort_by">
+                    <option value="source_row_number" {% if sort_by == "source_row_number" %}selected{% endif %}>Google sor</option>
+                    <option value="transaction_date" {% if sort_by == "transaction_date" %}selected{% endif %}>Dátum</option>
+                    <option value="external_id" {% if sort_by == "external_id" %}selected{% endif %}>Külső ID</option>
+                    <option value="gross_amount_huf" {% if sort_by == "gross_amount_huf" %}selected{% endif %}>Bruttó összeg</option>
+                    <option value="car_name" {% if sort_by == "car_name" %}selected{% endif %}>Autó</option>
+                    <option value="partner_name" {% if sort_by == "partner_name" %}selected{% endif %}>Ügyfél</option>
+                </select>
+
+                <select name="sort_dir">
+                    <option value="desc" {% if sort_dir == "desc" %}selected{% endif %}>Csökkenő</option>
+                    <option value="asc" {% if sort_dir == "asc" %}selected{% endif %}>Növekvő</option>
+                </select>
+
+                <button type="submit">Szűrés</button>
+            </form>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Google sor</th>
+                        <th>Külső ID</th>
+                        <th>Dátum</th>
+                        <th>Típus</th>
+                        <th>Autó</th>
+                        <th>Ügyfél</th>
+                        <th>Bruttó</th>
+                        <th>ÁFA</th>
+                        <th>Nettó</th>
+                        <th>Számla státusz</th>
+                        <th>Fizetés státusz</th>
+                        <th>Validáció</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for row in rows %}
+                    <tr>
+                        <td>{{ row.source_row_number }}</td>
+                        <td>{{ row.external_id or "" }}</td>
+                        <td>{{ row.transaction_date or "" }}</td>
+                        <td><span class="badge">{{ row.transaction_type }}</span></td>
+                        <td>{{ row.car_name or "" }}</td>
+                        <td>{{ row.partner_name or "" }}</td>
+                        <td class="number">{{ "{:,}".format(row.gross_amount_huf or 0).replace(",", " ") }} Ft</td>
+                        <td>{{ row.vat_rate or "" }}</td>
+                        <td class="number">{{ row.net_amount_huf or "" }}</td>
+                        <td>{{ row.invoice_status or "" }}</td>
+                        <td>{{ row.payment_status or "" }}</td>
+                        <td><span class="status status-{{ row.normalized_status|lower }}">{{ row.normalized_status }}</span></td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination">
+                {% if page > 1 %}
+                <a href="/?page={{ page - 1 }}&search={{ search }}&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}&transaction_type={{ transaction_type }}&normalized_status={{ normalized_status }}">Előző</a>
+                {% endif %}
+
+                <span>{{ page }} / {{ total_pages }}</span>
+
+                {% if page < total_pages %}
+                <a href="/?page={{ page + 1 }}&search={{ search }}&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}&transaction_type={{ transaction_type }}&normalized_status={{ normalized_status }}">Következő</a>
+                {% endif %}
+            </div>
+        </section>
+    </main>
+</div>
+</body>
+</html>

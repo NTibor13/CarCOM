@@ -43,8 +43,8 @@ class GoogleSheetsClient:
                     "values("
                     "formattedValue,"
                     "hyperlink,"
-                    "textFormatRuns(format(link(uri))),"
-                    "chipRuns(chip(richLinkProperties(uri)))"
+                    "textFormatRuns(startIndex,format(link(uri))),"
+                    "chipRuns(startIndex,chip(richLinkProperties(uri)))"
                     ")"
                     ")"
                     ")"
@@ -111,34 +111,60 @@ class GoogleSheetsClient:
                 "raw_value": formatted_value,
             })
 
-        for run in cell.get("textFormatRuns", []):
+        text_runs = cell.get("textFormatRuns", [])
+
+        for index, run in enumerate(text_runs):
             uri = (
                 run.get("format", {})
                 .get("link", {})
                 .get("uri")
             )
-            if uri:
-                links.append({
-                    "file_name": formatted_value or uri,
-                    "file_url": uri,
-                    "raw_value": formatted_value,
-                })
 
-        for chip_run in cell.get("chipRuns", []):
+            if not uri:
+                continue
+
+            start_index = run.get("startIndex", 0)
+
+            if index + 1 < len(text_runs):
+                end_index = text_runs[index + 1].get("startIndex", len(formatted_value))
+            else:
+                end_index = len(formatted_value)
+
+            file_name = formatted_value[start_index:end_index].strip()
+
+            links.append({
+                "file_name": file_name or formatted_value or uri,
+                "file_url": uri,
+                "raw_value": formatted_value,
+            })
+
+        chip_runs = cell.get("chipRuns", [])
+
+        for index, chip_run in enumerate(chip_runs):
             rich_link = (
                 chip_run.get("chip", {})
                 .get("richLinkProperties", {})
             )
 
             uri = rich_link.get("uri")
-            title = formatted_value or uri
 
-            if uri:
-                links.append({
-                    "file_name": title,
-                    "file_url": uri,
-                    "raw_value": formatted_value or title,
-                })
+            if not uri:
+                continue
+
+            start_index = chip_run.get("startIndex", 0)
+
+            if index + 1 < len(chip_runs):
+                end_index = chip_runs[index + 1].get("startIndex", len(formatted_value))
+            else:
+                end_index = len(formatted_value)
+
+            file_name = formatted_value[start_index:end_index].strip()
+
+            links.append({
+                "file_name": file_name or formatted_value or uri,
+                "file_url": uri,
+                "raw_value": formatted_value,
+            })
 
         unique_links = []
         seen = set()

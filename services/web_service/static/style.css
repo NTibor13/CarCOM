@@ -254,3 +254,65 @@ tbody tr:hover {
         grid-template-columns: 1fr;
     }
 }
+
+.status-error {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.empty-state {
+    text-align: center;
+    color: var(--muted);
+    padding: 32px;
+}
+
+.table-link {
+    color: var(--primary);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.table-link:hover {
+    text-decoration: underline;
+}
+
+.secondary-button {
+    border: 1px solid var(--border);
+    background: white;
+    color: var(--text);
+    padding: 12px 18px;
+    border-radius: 12px;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.details-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 24px;
+}
+
+.details-list {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    gap: 10px 16px;
+}
+
+.details-list dt {
+    color: var(--muted);
+    font-weight: 700;
+}
+
+.details-list dd {
+    margin: 0;
+}
+
+.raw-json {
+    background: #0f172a;
+    color: #e5e7eb;
+    border-radius: 14px;
+    padding: 18px;
+    overflow: auto;
+    font-size: 13px;
+}

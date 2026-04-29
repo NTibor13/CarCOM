@@ -89,6 +89,7 @@ def dashboard(
         cur.execute(
             f"""
             SELECT
+                id,
                 source_row_number,
                 external_id,
                 transaction_date,
@@ -148,8 +149,188 @@ def dashboard(
         },
     )
 
+@app.get("/validation-errors", response_class=HTMLResponse)
+def validation_errors(
+    request: Request,
+    page: int = Query(1, ge=1),
+    search: str = "",
+    severity: str = "",
+    error_code: str = "",
+):
+    init_database()
+
+    page_size = 25
+    offset = (page - 1) * page_size
+
+    where_clauses = []
+    params = []
+
+    if search:
+        where_clauses.append("""
+            (
+                CAST(t.source_row_number AS TEXT) LIKE ?
+                OR CAST(t.external_id AS TEXT) LIKE ?
+                OR t.car_name LIKE ?
+                OR t.partner_name LIKE ?
+                OR v.field_name LIKE ?
+                OR v.error_message LIKE ?
+            )
+        """)
+        like_value = f"%{search}%"
+        params.extend([like_value] * 6)
+
+    if severity:
+        where_clauses.append("v.severity = ?")
+        params.append(severity)
+
+    if error_code:
+        where_clauses.append("v.error_code = ?")
+        params.append(error_code)
+
+    where_sql = ""
+    if where_clauses:
+        where_sql = "WHERE " + " AND ".join(where_clauses)
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        cur.execute(
+            f"""
+            SELECT COUNT(*) AS count
+            FROM finance_validation_errors v
+            LEFT JOIN finance_transactions t ON t.id = v.transaction_id
+            {where_sql}
+            """,
+            params,
+        )
+        total_count = int(cur.fetchone()["count"])
+
+        cur.execute(
+            f"""
+            SELECT
+                v.id,
+                v.severity,
+                v.field_name,
+                v.error_code,
+                v.error_message,
+                v.created_at,
+                t.source_row_number,
+                t.external_id,
+                t.transaction_type,
+                t.car_name,
+                t.partner_name,
+                t.normalized_status
+            FROM finance_validation_errors v
+            LEFT JOIN finance_transactions t ON t.id = v.transaction_id
+            {where_sql}
+            ORDER BY t.source_row_number DESC, v.severity ASC, v.field_name ASC
+            LIMIT ? OFFSET ?
+            """,
+            [*params, page_size, offset],
+        )
+        rows = [dict(row) for row in cur.fetchall()]
+
+        cur.execute("""
+            SELECT severity, COUNT(*) AS count
+            FROM finance_validation_errors
+            GROUP BY severity
+            ORDER BY severity
+        """)
+        severity_summary = [dict(row) for row in cur.fetchall()]
+
+        cur.execute("""
+            SELECT error_code, COUNT(*) AS count
+            FROM finance_validation_errors
+            GROUP BY error_code
+            ORDER BY count DESC
+        """)
+        error_code_summary = [dict(row) for row in cur.fetchall()]
+
+    total_pages = max((total_count + page_size - 1) // page_size, 1)
+
+    return templates.TemplateResponse(
+        "validation_errors.html",
+        {
+            "request": request,
+            "rows": rows,
+            "page": page,
+            "page_size": page_size,
+            "total_count": total_count,
+            "total_pages": total_pages,
+            "search": search,
+            "severity": severity,
+            "error_code": error_code,
+            "severity_summary": severity_summary,
+            "error_code_summary": error_code_summary,
+        },
+    )
 
 @app.post("/sync")
 def run_manual_sync():
     run_pipeline_once()
     return RedirectResponse(url="/", status_code=303)
+
+import json
+from fastapi import HTTPException
+
+
+@app.get("/transactions/{transaction_id}", response_class=HTMLResponse)
+def transaction_details(request: Request, transaction_id: int):
+    init_database()
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT *
+            FROM finance_transactions
+            WHERE id = ?
+        """, (transaction_id,))
+        transaction = cur.fetchone()
+
+        if transaction is None:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+
+        transaction = dict(transaction)
+
+        cur.execute("""
+            SELECT raw_json
+            FROM sheet_rows_raw
+            WHERE id = ?
+        """, (transaction["sheet_row_id"],))
+        raw_row = cur.fetchone()
+
+        raw_json_pretty = ""
+        if raw_row and raw_row["raw_json"]:
+            raw_json_pretty = json.dumps(
+                json.loads(raw_row["raw_json"]),
+                ensure_ascii=False,
+                indent=2,
+            )
+
+        cur.execute("""
+            SELECT *
+            FROM finance_validation_errors
+            WHERE transaction_id = ?
+            ORDER BY severity, field_name
+        """, (transaction_id,))
+        validation_errors = [dict(row) for row in cur.fetchall()]
+
+        cur.execute("""
+            SELECT *
+            FROM finance_transaction_documents
+            WHERE transaction_id = ?
+            ORDER BY document_type, file_name
+        """, (transaction_id,))
+        documents = [dict(row) for row in cur.fetchall()]
+
+    return templates.TemplateResponse(
+        "transaction_details.html",
+        {
+            "request": request,
+            "transaction": transaction,
+            "validation_errors": validation_errors,
+            "documents": documents,
+            "raw_json_pretty": raw_json_pretty,
+        },
+    )

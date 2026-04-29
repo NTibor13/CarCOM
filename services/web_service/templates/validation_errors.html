@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="hu">
+<head>
+    <meta charset="utf-8">
+    <title>CarCOM - Validációs hibák</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="app-shell">
+    <aside class="sidebar">
+        <div class="brand">CarCOM</div>
+        <nav>
+            <a href="/">Köztes adatréteg</a>
+            <a href="#">Szinkron futások</a>
+            <a class="active" href="/validation-errors">Validációs hibák</a>
+            <a href="#">Beállítások</a>
+        </nav>
+    </aside>
+
+    <main class="main">
+        <header class="topbar">
+            <div>
+                <h1>Validációs hibák</h1>
+                <p>Adatminőségi hibák és figyelmeztetések a normalizált köztes réteg alapján.</p>
+            </div>
+
+            <form method="post" action="/sync">
+                <button class="primary-button" type="submit">Szinkron futtatása</button>
+            </form>
+        </header>
+
+        <section class="cards">
+            <div class="card">
+                <span>Összes hiba / figyelmeztetés</span>
+                <strong>{{ total_count }}</strong>
+            </div>
+
+            {% for item in severity_summary %}
+            <div class="card">
+                <span>{{ item.severity }}</span>
+                <strong>{{ item.count }}</strong>
+            </div>
+            {% endfor %}
+        </section>
+
+        <section class="panel">
+            <form class="filters" method="get">
+                <input
+                    type="text"
+                    name="search"
+                    placeholder="Keresés: sor, ID, autó, ügyfél, mező, hibaüzenet..."
+                    value="{{ search }}"
+                >
+
+                <select name="severity">
+                    <option value="">Minden súlyosság</option>
+                    <option value="ERROR" {% if severity == "ERROR" %}selected{% endif %}>ERROR</option>
+                    <option value="WARNING" {% if severity == "WARNING" %}selected{% endif %}>WARNING</option>
+                </select>
+
+                <select name="error_code">
+                    <option value="">Minden hibakód</option>
+                    {% for item in error_code_summary %}
+                    <option value="{{ item.error_code }}" {% if error_code == item.error_code %}selected{% endif %}>
+                        {{ item.error_code }} ({{ item.count }})
+                    </option>
+                    {% endfor %}
+                </select>
+
+                <button type="submit">Szűrés</button>
+            </form>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Google sor</th>
+                        <th>Külső ID</th>
+                        <th>Típus</th>
+                        <th>Autó</th>
+                        <th>Ügyfél</th>
+                        <th>Súlyosság</th>
+                        <th>Mező</th>
+                        <th>Hibakód</th>
+                        <th>Üzenet</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for row in rows %}
+                    <tr>
+                        <td>{{ row.source_row_number or "" }}</td>
+                        <td>{{ row.external_id or "" }}</td>
+                        <td><span class="badge">{{ row.transaction_type or "" }}</span></td>
+                        <td>{{ row.car_name or "" }}</td>
+                        <td>{{ row.partner_name or "" }}</td>
+                        <td>
+                            <span class="status status-{{ row.severity|lower }}">
+                                {{ row.severity }}
+                            </span>
+                        </td>
+                        <td>{{ row.field_name }}</td>
+                        <td>{{ row.error_code }}</td>
+                        <td>{{ row.error_message }}</td>
+                    </tr>
+                    {% endfor %}
+
+                    {% if rows|length == 0 %}
+                    <tr>
+                        <td colspan="9" class="empty-state">
+                            Nincs validációs hiba az aktuális szűrés alapján.
+                        </td>
+                    </tr>
+                    {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination">
+                {% if page > 1 %}
+                <a href="/validation-errors?page={{ page - 1 }}&search={{ search }}&severity={{ severity }}&error_code={{ error_code }}">Előző</a>
+                {% endif %}
+
+                <span>{{ page }} / {{ total_pages }}</span>
+
+                {% if page < total_pages %}
+                <a href="/validation-errors?page={{ page + 1 }}&search={{ search }}&severity={{ severity }}&error_code={{ error_code }}">Következő</a>
+                {% endif %}
+            </div>
+        </section>
+    </main>
+</div>
+</body>
+</html>

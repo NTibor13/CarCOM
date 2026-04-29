@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
+from services.sync_service.google_sheets_client import GoogleSheetsClient
 
 from shared.database.connection import get_connection
 from services.main_service.finance_mapping import (
@@ -63,8 +64,17 @@ class FinanceNormalizer:
         warnings = 0
         header_errors = 0
 
+        document_links_by_cell = GoogleSheetsClient().read_document_links(
+            list(DOCUMENT_COLUMNS.keys())
+        )
+
         with get_connection() as conn:
             cur = conn.cursor()
+            # A verzió: a normalizált köztes réteget minden futáskor újraépítjük.
+            # Így a törölt/inaktív Google Sheet sorok nem maradnak bent szellemsorként.
+            cur.execute("DELETE FROM finance_validation_errors")
+            cur.execute("DELETE FROM finance_transaction_documents")
+            cur.execute("DELETE FROM finance_transactions")
             cur.execute(
                 """
                 SELECT id, source_row_number, raw_json
@@ -86,7 +96,14 @@ class FinanceNormalizer:
 
                 transaction = self._normalize_row(sheet_row_id, source_row_number, raw_data)
                 transaction_id = self._upsert_transaction(cur, transaction)
-                self._replace_documents(cur, transaction_id, raw_data)
+                self._replace_documents(
+                    cur,
+                    transaction_id,
+                    raw_data,
+                    document_links_by_cell.get((source_row_number, None), []),
+                    source_row_number,
+                    document_links_by_cell,
+                )
                 self._replace_validation_issues(cur, transaction_id, sheet_row_id, transaction.issues)
                 self._update_processing_flow_type(cur, sheet_row_id, transaction.transaction_type)
 
@@ -308,23 +325,78 @@ class FinanceNormalizer:
         )
         return int(cur.lastrowid)
 
-    def _replace_documents(self, cur, transaction_id: int, raw: dict[str, Any]) -> None:
-        cur.execute("DELETE FROM finance_transaction_documents WHERE transaction_id = ?", (transaction_id,))
+    def _replace_documents(
+            self,
+            cur,
+            transaction_id: int,
+            raw: dict[str, Any],
+            unused_links: list[dict[str, str]] | None = None,
+            source_row_number: int | None = None,
+            document_links_by_cell: dict[tuple[int, str], list[dict[str, str]]] | None = None,
+    ) -> None:
+        cur.execute(
+            "DELETE FROM finance_transaction_documents WHERE transaction_id = ?",
+            (transaction_id,),
+        )
+
         timestamp = now_iso()
+        document_links_by_cell = document_links_by_cell or {}
+
         for source_column, document_type in DOCUMENT_COLUMNS.items():
             raw_value = self._text(raw.get(source_column, ""))
-            if not raw_value:
+            links = document_links_by_cell.get((source_row_number, source_column), [])
+
+            if links:
+                for link in links:
+                    cur.execute(
+                        """
+                        INSERT INTO finance_transaction_documents (
+                            transaction_id,
+                            document_type,
+                            source_column,
+                            file_name,
+                            file_url,
+                            raw_value,
+                            created_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            transaction_id,
+                            document_type,
+                            source_column,
+                            link.get("file_name") or raw_value,
+                            link.get("file_url"),
+                            link.get("raw_value") or raw_value,
+                            timestamp,
+                        ),
+                    )
                 continue
-            # A simple values.get Sheets hívás rich-link cellából jelenleg jellemzően csak
-            # a megjelenített fájlnevet adja vissza. A valódi URL-t később includeGridData-val olvassuk.
-            cur.execute(
-                """
-                INSERT INTO finance_transaction_documents (
-                    transaction_id, document_type, source_column, file_name, file_url, raw_value, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (transaction_id, document_type, source_column, raw_value, None, raw_value, timestamp),
-            )
+
+            if raw_value:
+                cur.execute(
+                    """
+                    INSERT INTO finance_transaction_documents (
+                        transaction_id,
+                        document_type,
+                        source_column,
+                        file_name,
+                        file_url,
+                        raw_value,
+                        created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        transaction_id,
+                        document_type,
+                        source_column,
+                        raw_value,
+                        None,
+                        raw_value,
+                        timestamp,
+                    ),
+                )
 
     def _replace_validation_issues(self, cur, transaction_id: int, sheet_row_id: int, issues: list[ValidationIssue]) -> None:
         cur.execute("DELETE FROM finance_validation_errors WHERE transaction_id = ?", (transaction_id,))

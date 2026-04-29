@@ -12,7 +12,7 @@
         <nav>
             <a class="active" href="/">Köztes adatréteg</a>
             <a href="#">Szinkron futások</a>
-            <a href="#">Validációs hibák</a>
+            <a href="/validation-errors">Validációs hibák</a>
             <a href="#">Beállítások</a>
         </nav>
     </aside>
@@ -46,40 +46,56 @@
         <section class="panel">
             <form class="filters" method="get">
                 <input
-                    type="text"
-                    name="search"
-                    placeholder="Keresés: autó, ügyfél, közlemény, ID..."
-                    value="{{ search }}"
+                        type="text"
+                        name="search"
+                        placeholder="Keresés: autó, ügyfél, közlemény, ID..."
+                        value="{{ search }}"
                 >
 
                 <select name="transaction_type">
                     <option value="">Minden típus</option>
-                    <option value="PURCHASE" {% if transaction_type == "PURCHASE" %}selected{% endif %}>Vétel</option>
-                    <option value="SALE" {% if transaction_type == "SALE" %}selected{% endif %}>Eladás</option>
-                    <option value="SALE_STOCK_90_DAYS" {% if transaction_type == "SALE_STOCK_90_DAYS" %}selected{% endif %}>Eladás készlet 90 nap</option>
-                    <option value="OTHER" {% if transaction_type == "OTHER" %}selected{% endif %}>Egyéb</option>
-                    <option value="UNKNOWN" {% if transaction_type == "UNKNOWN" %}selected{% endif %}>Ismeretlen</option>
+                    <option value="PURCHASE" {% if transaction_type==
+                    "PURCHASE" %}selected{% endif %}>Vétel</option>
+                    <option value="SALE" {% if transaction_type==
+                    "SALE" %}selected{% endif %}>Eladás</option>
+                    <option value="SALE_STOCK_90_DAYS" {% if transaction_type==
+                    "SALE_STOCK_90_DAYS" %}selected{% endif %}>Eladás készlet 90 nap</option>
+                    <option value="OTHER" {% if transaction_type==
+                    "OTHER" %}selected{% endif %}>Egyéb</option>
+                    <option value="UNKNOWN" {% if transaction_type==
+                    "UNKNOWN" %}selected{% endif %}>Ismeretlen</option>
                 </select>
 
                 <select name="normalized_status">
                     <option value="">Minden státusz</option>
-                    <option value="VALID" {% if normalized_status == "VALID" %}selected{% endif %}>VALID</option>
-                    <option value="WARNING" {% if normalized_status == "WARNING" %}selected{% endif %}>WARNING</option>
-                    <option value="INVALID" {% if normalized_status == "INVALID" %}selected{% endif %}>INVALID</option>
+                    <option value="VALID" {% if normalized_status==
+                    "VALID" %}selected{% endif %}>VALID</option>
+                    <option value="WARNING" {% if normalized_status==
+                    "WARNING" %}selected{% endif %}>WARNING</option>
+                    <option value="INVALID" {% if normalized_status==
+                    "INVALID" %}selected{% endif %}>INVALID</option>
                 </select>
 
                 <select name="sort_by">
-                    <option value="source_row_number" {% if sort_by == "source_row_number" %}selected{% endif %}>Google sor</option>
-                    <option value="transaction_date" {% if sort_by == "transaction_date" %}selected{% endif %}>Dátum</option>
-                    <option value="external_id" {% if sort_by == "external_id" %}selected{% endif %}>Külső ID</option>
-                    <option value="gross_amount_huf" {% if sort_by == "gross_amount_huf" %}selected{% endif %}>Bruttó összeg</option>
-                    <option value="car_name" {% if sort_by == "car_name" %}selected{% endif %}>Autó</option>
-                    <option value="partner_name" {% if sort_by == "partner_name" %}selected{% endif %}>Ügyfél</option>
+                    <option value="source_row_number" {% if sort_by==
+                    "source_row_number" %}selected{% endif %}>Google sor</option>
+                    <option value="transaction_date" {% if sort_by==
+                    "transaction_date" %}selected{% endif %}>Dátum</option>
+                    <option value="external_id" {% if sort_by==
+                    "external_id" %}selected{% endif %}>Külső ID</option>
+                    <option value="gross_amount_huf" {% if sort_by==
+                    "gross_amount_huf" %}selected{% endif %}>Bruttó összeg</option>
+                    <option value="car_name" {% if sort_by==
+                    "car_name" %}selected{% endif %}>Autó</option>
+                    <option value="partner_name" {% if sort_by==
+                    "partner_name" %}selected{% endif %}>Ügyfél</option>
                 </select>
 
                 <select name="sort_dir">
-                    <option value="desc" {% if sort_dir == "desc" %}selected{% endif %}>Csökkenő</option>
-                    <option value="asc" {% if sort_dir == "asc" %}selected{% endif %}>Növekvő</option>
+                    <option value="desc" {% if sort_dir==
+                    "desc" %}selected{% endif %}>Csökkenő</option>
+                    <option value="asc" {% if sort_dir==
+                    "asc" %}selected{% endif %}>Növekvő</option>
                 </select>
 
                 <button type="submit">Szűrés</button>
@@ -110,14 +126,20 @@
                         <td>{{ row.external_id or "" }}</td>
                         <td>{{ row.transaction_date or "" }}</td>
                         <td><span class="badge">{{ row.transaction_type }}</span></td>
-                        <td>{{ row.car_name or "" }}</td>
+                        <td>
+                            <a class="table-link" href="/transactions/{{ row.id }}">
+                                {{ row.car_name or "Részletek" }}
+                            </a>
+                        </td>
                         <td>{{ row.partner_name or "" }}</td>
                         <td class="number">{{ "{:,}".format(row.gross_amount_huf or 0).replace(",", " ") }} Ft</td>
                         <td>{{ row.vat_rate or "" }}</td>
                         <td class="number">{{ row.net_amount_huf or "" }}</td>
                         <td>{{ row.invoice_status or "" }}</td>
                         <td>{{ row.payment_status or "" }}</td>
-                        <td><span class="status status-{{ row.normalized_status|lower }}">{{ row.normalized_status }}</span></td>
+                        <td><span
+                                class="status status-{{ row.normalized_status|lower }}">{{ row.normalized_status }}</span>
+                        </td>
                     </tr>
                     {% endfor %}
                     </tbody>

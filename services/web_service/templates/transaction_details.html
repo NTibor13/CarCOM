@@ -13,6 +13,7 @@
             <a href="/">Köztes adatréteg</a>
             <a href="#">Szinkron futások</a>
             <a href="/validation-errors">Validációs hibák</a>
+            <a href="/api-logs">API hívások</a>
             <a href="#">Beállítások</a>
         </nav>
     </aside>
@@ -48,16 +49,48 @@
                 <span>Validáció</span>
                 <strong>{{ transaction.normalized_status }}</strong>
             </div>
-            <div class="detail-row">
-                <span class="label">Flow</span>
+        </section>
+
+        {% if transaction.flow_action == "BILLINGO_DRAFT_REQUIRED" %}
+        <section class="flow-block">
+            <div class="flow-content">
+                <div class="flow-icon">✓</div>
+
+                <div class="flow-text">
+                    <p class="flow-kicker">Billingo folyamat</p>
+                    <h2>Ez a tranzakció kiszámlázható</h2>
+                    <p>
+                        Az adatok megfelelnek a számladraft előkészítéséhez szükséges feltételeknek.
+                    </p>
+                </div>
+            </div>
+
+            <div class="flow-side">
+                <span class="flow-badge">Kiszámlázható</span>
 
                 {% if transaction.flow_action == "BILLINGO_DRAFT_REQUIRED" %}
-                <span class="status status-valid">Kiszámlázható</span>
-                {% else %}
-                <span class="muted">Nincs aktív folyamat</span>
+                <form method="post" action="/transactions/{{ transaction.id }}/approve-billingo">
+                    <button type="submit" class="flow-primary-button">
+                        Számladraft jóváhagyása
+                    </button>
+                </form>
                 {% endif %}
             </div>
+            {% if approval_status == "approved" %}
+            <div class="flow-message flow-message-success">
+                A Billingo számladraft jóváhagyása megtörtént.
+            </div>
+            {% elif approval_status == "not_ready" %}
+            <div class="flow-message flow-message-error">
+                Ez a tranzakció jelenleg nem kiszámlázható.
+            </div>
+            {% elif approval_status == "billingo_error" %}
+            <div class="flow-message flow-message-error">
+                A Billingo számladraft létrehozása sikertelen volt. Részletek a szerver logban.
+            </div>
+            {% endif %}
         </section>
+        {% endif %}
 
         <section class="panel details-grid">
             <div>

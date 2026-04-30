@@ -150,6 +150,23 @@ def init_database() -> None:
         )
         """)
 
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS api_call_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider TEXT NOT NULL,
+            endpoint TEXT NOT NULL,
+            method TEXT NOT NULL,
+            transaction_id INTEGER,
+            request_json TEXT,
+            response_status INTEGER,
+            response_json TEXT,
+            success INTEGER NOT NULL DEFAULT 0,
+            error_message TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(transaction_id) REFERENCES finance_transactions(id)
+        )
+        """)
+
         _seed_lookup_values(cur)
 
         conn.commit()

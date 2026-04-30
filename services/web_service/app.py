@@ -7,6 +7,9 @@ from shared.database.schema import init_database
 from shared.database.connection import get_connection
 from services.main_service.app import run_pipeline_once
 from services.flow_service.flow_engine import evaluate_transaction
+from services.billingo_service.billingo_payload_builder import build_billingo_payload
+from services.billingo_service.billingo_client import create_draft_document, BillingoApiError
+from services.billingo_service.api_call_logger import log_api_call
 
 app = FastAPI(title="CarCOM Dashboard")
 
@@ -320,7 +323,7 @@ from fastapi import HTTPException
 
 
 @app.get("/transactions/{transaction_id}", response_class=HTMLResponse)
-def transaction_details(request: Request, transaction_id: int):
+def transaction_details(request: Request, transaction_id: int, approval_status: str = "",):
     init_database()
 
     with get_connection() as conn:
@@ -338,8 +341,6 @@ def transaction_details(request: Request, transaction_id: int):
             raise HTTPException(status_code=404, detail="Transaction not found")
 
         transaction = dict(transaction)
-
-
 
         flow_result = evaluate_transaction(transaction)
         transaction["flow_action"] = flow_result["action"]
@@ -384,5 +385,226 @@ def transaction_details(request: Request, transaction_id: int):
             "validation_errors": validation_errors,
             "documents": documents,
             "raw_json_pretty": raw_json_pretty,
+            "approval_status": approval_status,
+        },
+    )
+
+@app.post("/transactions/{transaction_id}/approve-billingo")
+def approve_billingo_draft(transaction_id: int):
+    init_database()
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            SELECT *
+            FROM finance_transactions
+            WHERE id = ?
+            """,
+            (transaction_id,),
+        )
+        transaction = cur.fetchone()
+
+        if transaction is None:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+
+        transaction = dict(transaction)
+        flow_result = evaluate_transaction(transaction)
+
+        if flow_result["action"] != "BILLINGO_DRAFT_REQUIRED":
+            return RedirectResponse(
+                url=f"/transactions/{transaction_id}?approval_status=not_ready",
+                status_code=303,
+            )
+
+        payload = build_billingo_payload(transaction)
+
+        print("[BILLINGO PAYLOAD]", payload)
+
+        try:
+            billingo_response = create_draft_document(payload)
+
+            log_api_call(
+                provider="Billingo",
+                endpoint="/documents",
+                method="POST",
+                transaction_id=transaction_id,
+                request_payload=payload,
+                response_status=201,
+                response_payload=billingo_response,
+                success=True,
+            )
+
+            print("[BILLINGO RESPONSE]", billingo_response)
+
+        except BillingoApiError as exc:
+            log_api_call(
+                provider="Billingo",
+                endpoint="/documents",
+                method="POST",
+                transaction_id=transaction_id,
+                request_payload=payload,
+                response_status=exc.status_code,
+                response_payload=exc.response_data,
+                success=False,
+                error_message=str(exc),
+            )
+
+            print("[BILLINGO ERROR]", str(exc))
+
+            return RedirectResponse(
+                url=f"/transactions/{transaction_id}?approval_status=billingo_error",
+                status_code=303,
+            )
+
+        print(
+            "[FLOW APPROVAL] Billingo draft approved",
+            {
+                "transaction_id": transaction_id,
+                "source_row_number": transaction.get("source_row_number"),
+                "car_name": transaction.get("car_name"),
+                "partner_name": transaction.get("partner_name"),
+                "amount": transaction.get("net_amount_huf"),
+            },
+        )
+
+    return RedirectResponse(
+        url=f"/transactions/{transaction_id}?approval_status=approved",
+        status_code=303,
+    )
+
+@app.get("/api-logs", response_class=HTMLResponse)
+def api_logs(
+    request: Request,
+    page: int = Query(1, ge=1),
+    provider: str = "",
+    success: str = "",
+):
+    init_database()
+
+    page_size = 25
+    offset = (page - 1) * page_size
+
+    where_clauses = []
+    params = []
+
+    if provider:
+        where_clauses.append("provider = ?")
+        params.append(provider)
+
+    if success in ("0", "1"):
+        where_clauses.append("success = ?")
+        params.append(int(success))
+
+    where_sql = ""
+    if where_clauses:
+        where_sql = "WHERE " + " AND ".join(where_clauses)
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        cur.execute(
+            f"""
+            SELECT COUNT(*) AS count
+            FROM api_call_logs
+            {where_sql}
+            """,
+            params,
+        )
+        total_count = int(cur.fetchone()["count"])
+
+        cur.execute(
+            f"""
+            SELECT
+                l.id,
+                l.provider,
+                l.endpoint,
+                l.method,
+                l.transaction_id,
+                l.response_status,
+                l.success,
+                l.error_message,
+                l.created_at,
+                t.source_row_number,
+                t.car_name,
+                t.partner_name
+            FROM api_call_logs l
+            LEFT JOIN finance_transactions t
+                ON t.id = l.transaction_id
+            {where_sql}
+            ORDER BY l.id DESC
+            LIMIT ? OFFSET ?
+            """,
+            [*params, page_size, offset],
+        )
+
+        rows = [dict(row) for row in cur.fetchall()]
+
+        total_pages = max((total_count + page_size - 1) // page_size, 1)
+
+    return templates.TemplateResponse(
+        "api_logs.html",
+        {
+            "request": request,
+            "rows": rows,
+            "page": page,
+            "page_size": page_size,
+            "total_count": total_count,
+            "total_pages": total_pages,
+            "provider": provider,
+            "success": success,
+        },
+    )
+
+@app.get("/api-logs/{log_id}", response_class=HTMLResponse)
+def api_log_detail(request: Request, log_id: int):
+    init_database()
+    import json
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            SELECT
+                l.*,
+                t.source_row_number,
+                t.car_name,
+                t.partner_name,
+                t.external_id
+            FROM api_call_logs l
+            LEFT JOIN finance_transactions t
+                ON t.id = l.transaction_id
+            WHERE l.id = ?
+            """,
+            (log_id,),
+        )
+
+        log = cur.fetchone()
+
+        if log is None:
+            raise HTTPException(status_code=404, detail="API log not found")
+
+        log = dict(log)
+
+        def pretty_json(value):
+            if not value:
+                return ""
+
+            try:
+                parsed = json.loads(value)
+                return json.dumps(parsed, indent=2, ensure_ascii=False)
+            except Exception:
+                return value
+
+        log["request_json_pretty"] = pretty_json(log.get("request_json"))
+        log["response_json_pretty"] = pretty_json(log.get("response_json"))
+
+    return templates.TemplateResponse(
+        "api_log_detail.html",
+        {
+            "request": request,
+            "log": log,
         },
     )

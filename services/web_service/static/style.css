@@ -397,3 +397,139 @@ tbody tr:hover {
   padding: 7px 10px;
   font-weight: 700;
 }
+
+.sync-alert-error {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.flow-block {
+  margin-top: 32px;
+  padding: 22px;
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 60%);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.flow-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  min-width: 280px;
+  flex: 1;
+}
+
+.flow-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: #dcfce7;
+  color: #166534;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.flow-kicker {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.flow-text h2 {
+  margin: 0;
+  font-size: 22px;
+  color: var(--text);
+}
+
+.flow-text p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.flow-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.flow-badge {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.flow-primary-button {
+  border: none;
+  border-radius: 14px;
+  padding: 13px 18px;
+  background: #2563eb;
+  color: white;
+  font-weight: 800;
+  font-size: 15px;
+  cursor: pointer;
+  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.22);
+}
+
+.flow-primary-button:hover {
+  background: #1d4ed8;
+}
+
+.flow-message {
+  width: 100%;
+  margin-top: 4px;
+  padding: 13px 15px;
+  border-radius: 14px;
+  font-weight: 700;
+}
+
+.flow-message-success {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.flow-message-error {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.json-block {
+  position: relative;
+}
+
+.json-block button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #1e293b;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.json-block button:hover {
+  background: #334155;
+}

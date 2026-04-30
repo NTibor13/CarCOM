@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="hu">
+<head>
+    <meta charset="utf-8">
+    <title>CarCOM - API hívás részletek</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="app-shell">
+    <aside class="sidebar">
+        <div class="brand">CarCOM</div>
+        <nav>
+            <a href="/">Köztes adatréteg</a>
+            <a href="#">Szinkron futások</a>
+            <a href="/validation-errors">Validációs hibák</a>
+            <a class="active" href="/api-logs">API hívások</a>
+            <a href="#">Beállítások</a>
+        </nav>
+    </aside>
+
+    <main class="main">
+        <header class="topbar">
+            <div>
+                <h1>API hívás #{{ log.id }}</h1>
+                <p>{{ log.provider }} · {{ log.method }} {{ log.endpoint }} · {{ log.created_at }}</p>
+            </div>
+
+            <a class="secondary-button" href="/api-logs">Vissza az API hívásokhoz</a>
+        </header>
+
+        <section class="cards">
+            <div class="card">
+                <span>Eredmény</span>
+                {% if log.success %}
+                <strong>Sikeres</strong>
+                {% else %}
+                <strong>Sikertelen</strong>
+                {% endif %}
+            </div>
+
+            <div class="card">
+                <span>HTTP státusz</span>
+                <strong>{{ log.response_status or "-" }}</strong>
+            </div>
+
+            <div class="card">
+                <span>Provider</span>
+                <strong>{{ log.provider }}</strong>
+            </div>
+
+            <div class="card">
+                <span>Tranzakció</span>
+                {% if log.transaction_id %}
+                <strong>#{{ log.transaction_id }}</strong>
+                {% else %}
+                <strong>-</strong>
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="panel details-grid">
+            <div>
+                <h2>Kapcsolódó tranzakció</h2>
+
+                <dl class="details-list">
+                    <dt>Tranzakció ID</dt>
+                    <dd>
+                        {% if log.transaction_id %}
+                        <a class="table-link" href="/transactions/{{ log.transaction_id }}">
+                            #{{ log.transaction_id }}
+                        </a>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </dd>
+
+                    <dt>Google sor</dt>
+                    <dd>{{ log.source_row_number or "-" }}</dd>
+
+                    <dt>Külső ID</dt>
+                    <dd>{{ log.external_id or "-" }}</dd>
+
+                    <dt>Autó</dt>
+                    <dd>{{ log.car_name or "-" }}</dd>
+
+                    <dt>Partner</dt>
+                    <dd>{{ log.partner_name or "-" }}</dd>
+                </dl>
+            </div>
+
+            <div>
+                <h2>Hiba</h2>
+
+                {% if log.error_message %}
+                <div class="flow-message flow-message-error">
+                    {{ log.error_message }}
+                </div>
+                {% else %}
+                <div class="empty-state">Nincs hibaüzenet.</div>
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Request JSON</h2>
+            <div class="json-block">
+                <button onclick="copyJson('request-json')">Másolás</button>
+                <pre id="request-json" class="raw-json">{{ log.request_json_pretty or "-" }}</pre>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Response JSON</h2>
+            <div class="json-block">
+                <button onclick="copyJson('response-json')">Másolás</button>
+                <pre id="response-json" class="raw-json">{{ log.response_json_pretty or "-" }}</pre>
+            </div>
+        </section>
+    </main>
+</div>
+<script>
+    function copyJson(elementId) {
+      const text = document.getElementById(elementId).innerText;
+
+      navigator.clipboard.writeText(text).then(() => {
+        alert("JSON kimásolva!");
+      });
+    }
+</script>
+</body>
+</html>

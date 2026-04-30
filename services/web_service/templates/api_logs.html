@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="hu">
+<head>
+    <meta charset="utf-8">
+    <title>CarCOM - API hívások</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="app-shell">
+    <aside class="sidebar">
+        <div class="brand">CarCOM</div>
+        <nav>
+            <a href="/">Köztes adatréteg</a>
+            <a href="#">Szinkron futások</a>
+            <a href="/validation-errors">Validációs hibák</a>
+            <a class="active" href="/api-logs">API hívások</a>
+            <a href="#">Beállítások</a>
+        </nav>
+    </aside>
+
+    <main class="main">
+        <header class="topbar">
+            <div>
+                <h1>API hívások</h1>
+                <p>Billingo és későbbi külső integrációs hívások naplója.</p>
+            </div>
+        </header>
+
+        <section class="cards">
+            <div class="card">
+                <span>Összes API hívás</span>
+                <strong>{{ total_count }}</strong>
+            </div>
+        </section>
+
+        <section class="panel">
+            <form class="filters" method="get" action="/api-logs">
+                <select name="provider">
+                    <option value="">Minden provider</option>
+                    <option value="Billingo" {% if provider==
+                    "Billingo" %}selected{% endif %}>Billingo</option>
+                </select>
+
+                <select name="success">
+                    <option value="">Minden eredmény</option>
+                    <option value="1" {% if success==
+                    "1" %}selected{% endif %}>Sikeres</option>
+                    <option value="0" {% if success==
+                    "0" %}selected{% endif %}>Sikertelen</option>
+                </select>
+
+                <button type="submit">Szűrés</button>
+            </form>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Időpont</th>
+                        <th>Provider</th>
+                        <th>Endpoint</th>
+                        <th>Method</th>
+                        <th>Tranzakció</th>
+                        <th>Autó</th>
+                        <th>HTTP</th>
+                        <th>Eredmény</th>
+                        <th>Hiba</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for row in rows %}
+                    <tr>
+                        <td>
+                            <a class="table-link" href="/api-logs/{{ row.id }}">
+                                #{{ row.id }}
+                            </a>
+                        </td>
+                        <td>{{ row.created_at }}</td>
+                        <td>{{ row.provider }}</td>
+                        <td>{{ row.endpoint }}</td>
+                        <td><span class="badge">{{ row.method }}</span></td>
+                        <td>
+                            {% if row.transaction_id %}
+                            <a class="table-link" href="/transactions/{{ row.transaction_id }}">
+                                #{{ row.transaction_id }}
+                            </a>
+                            {% if row.source_row_number %}
+                            <br><span class="muted">Google sor: {{ row.source_row_number }}</span>
+                            {% endif %}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td>{{ row.car_name or "-" }}</td>
+                        <td>{{ row.response_status or "-" }}</td>
+                        <td>
+                            {% if row.success %}
+                            <span class="status status-valid">Sikeres</span>
+                            {% else %}
+                            <span class="status status-invalid">Sikertelen</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ row.error_message or "-" }}</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination">
+                {% if page > 1 %}
+                <a href="/api-logs?page={{ page - 1 }}&provider={{ provider }}&success={{ success }}">Előző</a>
+                {% endif %}
+
+                <span>{{ page }} / {{ total_pages }}</span>
+
+                {% if page < total_pages %}
+                <a href="/api-logs?page={{ page + 1 }}&provider={{ provider }}&success={{ success }}">Következő</a>
+                {% endif %}
+            </div>
+        </section>
+    </main>
+</div>
+</body>
+</html>

@@ -92,12 +92,14 @@ def dashboard(
             f"""
             SELECT
                 id,
+                sheet_row_id,
                 source_row_number,
                 external_id,
                 transaction_date,
                 transaction_type,
-                car_name,
                 source_cost_center,
+                source_account,
+                car_name,
                 partner_name,
                 gross_amount_huf,
                 vat_rate,
@@ -330,11 +332,18 @@ def transaction_details(request: Request, transaction_id: int):
             WHERE id = ?
         """, (transaction_id,))
         transaction = cur.fetchone()
+        from services.flow_service.flow_engine import evaluate_transaction
 
         if transaction is None:
             raise HTTPException(status_code=404, detail="Transaction not found")
 
         transaction = dict(transaction)
+
+
+
+        flow_result = evaluate_transaction(transaction)
+        transaction["flow_action"] = flow_result["action"]
+        transaction["flow_reason"] = flow_result["reason"]
 
         cur.execute("""
             SELECT raw_json

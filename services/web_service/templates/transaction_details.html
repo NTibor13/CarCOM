@@ -48,6 +48,15 @@
                 <span>Validáció</span>
                 <strong>{{ transaction.normalized_status }}</strong>
             </div>
+            <div class="detail-row">
+                <span class="label">Flow</span>
+
+                {% if transaction.flow_action == "BILLINGO_DRAFT_REQUIRED" %}
+                <span class="status status-valid">Kiszámlázható</span>
+                {% else %}
+                <span class="muted">Nincs aktív folyamat</span>
+                {% endif %}
+            </div>
         </section>
 
         <section class="panel details-grid">
@@ -55,17 +64,28 @@
                 <h2>Normalizált adatok</h2>
 
                 <dl class="details-list">
-                    <dt>Dátum</dt><dd>{{ transaction.transaction_date or "-" }}</dd>
-                    <dt>Ügyfél</dt><dd>{{ transaction.partner_name or "-" }}</dd>
-                    <dt>Költséghely</dt><dd>{{ transaction.source_cost_center or "-" }}</dd>
-                    <dt>Számla</dt><dd>{{ transaction.source_account or "-" }}</dd>
-                    <dt>Bankszámlaszám</dt><dd>{{ transaction.bank_account or "-" }}</dd>
-                    <dt>Közlemény</dt><dd>{{ transaction.payment_notice or "-" }}</dd>
-                    <dt>Fizetési határidő</dt><dd>{{ transaction.payment_deadline or "-" }}</dd>
-                    <dt>Számla státusz</dt><dd>{{ transaction.invoice_status or "-" }}</dd>
-                    <dt>Fizetés státusz</dt><dd>{{ transaction.payment_status or "-" }}</dd>
-                    <dt>KG tartozik</dt><dd>{{ transaction.kg_debt_huf or "-" }}</dd>
-                    <dt>Megjegyzés</dt><dd>{{ transaction.note or "-" }}</dd>
+                    <dt>Dátum</dt>
+                    <dd>{{ transaction.transaction_date or "-" }}</dd>
+                    <dt>Ügyfél</dt>
+                    <dd>{{ transaction.partner_name or "-" }}</dd>
+                    <dt>Költséghely</dt>
+                    <dd>{{ transaction.source_cost_center or "-" }}</dd>
+                    <dt>Számla</dt>
+                    <dd>{{ transaction.source_account or "-" }}</dd>
+                    <dt>Bankszámlaszám</dt>
+                    <dd>{{ transaction.bank_account or "-" }}</dd>
+                    <dt>Közlemény</dt>
+                    <dd>{{ transaction.payment_notice or "-" }}</dd>
+                    <dt>Fizetési határidő</dt>
+                    <dd>{{ transaction.payment_deadline or "-" }}</dd>
+                    <dt>Számla státusz</dt>
+                    <dd>{{ transaction.invoice_status or "-" }}</dd>
+                    <dt>Fizetés státusz</dt>
+                    <dd>{{ transaction.payment_status or "-" }}</dd>
+                    <dt>KG tartozik</dt>
+                    <dd>{{ transaction.kg_debt_huf or "-" }}</dd>
+                    <dt>Megjegyzés</dt>
+                    <dd>{{ transaction.note or "-" }}</dd>
                 </dl>
             </div>
 
@@ -73,28 +93,28 @@
                 <h2>Validációs hibák</h2>
 
                 {% if validation_errors %}
-                    <table>
-                        <thead>
-                        <tr>
-                            <th>Súlyosság</th>
-                            <th>Mező</th>
-                            <th>Hibakód</th>
-                            <th>Üzenet</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        {% for error in validation_errors %}
-                        <tr>
-                            <td><span class="status status-{{ error.severity|lower }}">{{ error.severity }}</span></td>
-                            <td>{{ error.field_name }}</td>
-                            <td>{{ error.error_code }}</td>
-                            <td>{{ error.error_message }}</td>
-                        </tr>
-                        {% endfor %}
-                        </tbody>
-                    </table>
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Súlyosság</th>
+                        <th>Mező</th>
+                        <th>Hibakód</th>
+                        <th>Üzenet</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for error in validation_errors %}
+                    <tr>
+                        <td><span class="status status-{{ error.severity|lower }}">{{ error.severity }}</span></td>
+                        <td>{{ error.field_name }}</td>
+                        <td>{{ error.error_code }}</td>
+                        <td>{{ error.error_message }}</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
                 {% else %}
-                    <div class="empty-state">Nincs validációs hiba ehhez a tranzakcióhoz.</div>
+                <div class="empty-state">Nincs validációs hiba ehhez a tranzakcióhoz.</div>
                 {% endif %}
             </div>
         </section>
@@ -103,34 +123,34 @@
             <h2>Dokumentumok</h2>
 
             {% if documents %}
-                <table>
-                    <thead>
-                    <tr>
-                        <th>Típus</th>
-                        <th>Forrás oszlop</th>
-                        <th>Fájlnév</th>
-                        <th>Link</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {% for doc in documents %}
-                    <tr>
-                        <td>{{ doc.document_type }}</td>
-                        <td>{{ doc.source_column }}</td>
-                        <td>{{ doc.file_name or "-" }}</td>
-                        <td>
-                            {% if doc.file_url %}
-                                <a href="{{ doc.file_url }}" target="_blank">Megnyitás</a>
-                            {% else %}
-                                -
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
+            <table>
+                <thead>
+                <tr>
+                    <th>Típus</th>
+                    <th>Forrás oszlop</th>
+                    <th>Fájlnév</th>
+                    <th>Link</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for doc in documents %}
+                <tr>
+                    <td>{{ doc.document_type }}</td>
+                    <td>{{ doc.source_column }}</td>
+                    <td>{{ doc.file_name or "-" }}</td>
+                    <td>
+                        {% if doc.file_url %}
+                        <a href="{{ doc.file_url }}" target="_blank">Megnyitás</a>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
             {% else %}
-                <div class="empty-state">Nincs dokumentum ehhez a tranzakcióhoz.</div>
+            <div class="empty-state">Nincs dokumentum ehhez a tranzakcióhoz.</div>
             {% endif %}
         </section>
 

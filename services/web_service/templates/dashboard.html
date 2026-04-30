@@ -43,6 +43,40 @@
             {% endfor %}
         </section>
 
+        {% if sync_status == "success" %}
+        <section class="sync-alert sync-alert-success">
+            A szinkron futtatása befejeződött.
+        </section>
+        {% endif %}
+
+        <section class="sync-status-block">
+            <div>
+                <span>Utolsó szinkron</span>
+
+                {% if latest_sync_run %}
+                <strong>{{ latest_sync_run.status }}</strong>
+                <p>
+                    Indult: {{ latest_sync_run.started_at }}
+                    {% if latest_sync_run.finished_at %}
+                    · Befejeződött: {{ latest_sync_run.finished_at }}
+                    {% endif %}
+                </p>
+                {% else %}
+                <strong>Nincs még szinkron futás</strong>
+                <p>Indítsd el az első szinkront a jobb felső gombbal.</p>
+                {% endif %}
+            </div>
+
+            {% if latest_sync_run %}
+            <div class="sync-metrics">
+                <span>Olvasott: {{ latest_sync_run.rows_read or 0 }}</span>
+                <span>Új: {{ latest_sync_run.inserted_count or 0 }}</span>
+                <span>Frissített: {{ latest_sync_run.updated_count or 0 }}</span>
+                <span>Törölt: {{ latest_sync_run.deleted_count or 0 }}</span>
+            </div>
+            {% endif %}
+        </section>
+
         <section class="panel">
             <form class="filters" method="get">
                 <input
@@ -121,7 +155,7 @@
                     </thead>
                     <tbody>
                     {% for row in rows %}
-                    <tr>
+                    <tr class="row-status-{{ row.normalized_status|lower }}">
                         <td>{{ row.source_row_number }}</td>
                         <td>{{ row.external_id or "" }}</td>
                         <td>{{ row.transaction_date or "" }}</td>

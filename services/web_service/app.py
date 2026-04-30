@@ -22,6 +22,7 @@ def dashboard(
     sort_dir: str = "desc",
     transaction_type: str = "",
     normalized_status: str = "",
+    sync_status: str = "",
 ):
     init_database()
 
@@ -128,6 +129,25 @@ def dashboard(
         """)
         status_summary = [dict(row) for row in cur.fetchall()]
 
+        cur.execute("""
+            SELECT
+                id,
+                service_name,
+                started_at,
+                finished_at,
+                status,
+                rows_read,
+                inserted_count,
+                updated_count,
+                deleted_count,
+                error_message
+            FROM sync_runs
+            ORDER BY started_at DESC
+            LIMIT 1
+        """)
+        latest_sync_run = cur.fetchone()
+        latest_sync_run = dict(latest_sync_run) if latest_sync_run else None
+
     total_pages = max((total_count + page_size - 1) // page_size, 1)
 
     return templates.TemplateResponse(
@@ -146,6 +166,8 @@ def dashboard(
             "normalized_status": normalized_status,
             "type_summary": type_summary,
             "status_summary": status_summary,
+            "latest_sync_run": latest_sync_run,
+            "sync_status": sync_status,
         },
     )
 
@@ -268,7 +290,7 @@ def validation_errors(
 @app.post("/sync")
 def run_manual_sync():
     run_pipeline_once()
-    return RedirectResponse(url="/", status_code=303)
+    return RedirectResponse(url="/?sync_status=success", status_code=303)
 
 import json
 from fastapi import HTTPException

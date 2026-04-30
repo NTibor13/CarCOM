@@ -168,20 +168,24 @@ class FinanceNormalizer:
         external_id = self._parse_int(raw.get("ID", ""), "ID", issues, required=True)
         transaction_date = self._parse_date(raw.get("Datum", ""), "Datum", issues, required=True)
         source_account = self._text(raw.get("Számla", ""))
-        gross_amount_huf = self._parse_money_int(raw.get("Osszeg (brutto)", ""), "Osszeg (brutto)", issues, required=True, absolute=True)
+        gross_amount_huf = self._parse_money_int(raw.get("Osszeg (brutto)", ""), "Osszeg (brutto)", issues,
+                                                 required=True, absolute=True)
         vat_rate = self._parse_vat_rate(raw.get("Afa %", ""), issues)
         net_amount_huf = self._calculate_net_amount(gross_amount_huf, vat_rate)
-        source_net = self._parse_money_decimal(raw.get("Osszeg (netto)", ""), "Osszeg (netto)", issues, required=False, absolute=True)
+        source_net = self._parse_money_decimal(raw.get("Osszeg (netto)", ""), "Osszeg (netto)", issues, required=False,
+                                               absolute=True)
         source_cost_center = self._text(raw.get("Koltseghely", ""))
         transaction_type = KOLTSEGHELY_MAP.get(source_cost_center, "UNKNOWN")
         car_name = self._text(raw.get("Autó", ""))
         partner_name = self._text(raw.get("Ügyfél", ""))
         bank_account = self._text(raw.get("Bankszámlaszám", ""))
         payment_notice = self._text(raw.get("Közlemény", ""))
-        payment_deadline = self._parse_date(raw.get("Fizetési határidő", ""), "Fizetési határidő", issues, required=False)
+        payment_deadline = self._parse_date(raw.get("Fizetési határidő", ""), "Fizetési határidő", issues,
+                                            required=False)
         invoice_status = self._text(raw.get("Státusz Számla", ""))
         payment_status = self._text(raw.get("Státusz fizetés", ""))
-        kg_debt_huf = self._parse_money_int(raw.get("KG tartozik", ""), "KG tartozik", issues, required=False, absolute=True)
+        kg_debt_huf = self._parse_money_int(raw.get("KG tartozik", ""), "KG tartozik", issues, required=False,
+                                            absolute=True)
         note = self._text(raw.get("Megjegyzés", ""))
 
         self._validate_required_text(source_account, "Számla", issues)
@@ -190,13 +194,17 @@ class FinanceNormalizer:
         self._validate_required_text(partner_name, "Ügyfél", issues)
 
         if source_account and source_account not in SOURCE_ACCOUNT_VALUES:
-            issues.append(ValidationIssue("Számla", "UNKNOWN_SOURCE_ACCOUNT", f"Ismeretlen Számla érték: {source_account}"))
+            issues.append(
+                ValidationIssue("Számla", "UNKNOWN_SOURCE_ACCOUNT", f"Ismeretlen Számla érték: {source_account}"))
         if source_cost_center and transaction_type == "UNKNOWN":
-            issues.append(ValidationIssue("Koltseghely", "UNKNOWN_KOLTSEGHELY", f"Ismeretlen Koltseghely érték: {source_cost_center}"))
+            issues.append(ValidationIssue("Koltseghely", "UNKNOWN_KOLTSEGHELY",
+                                          f"Ismeretlen Koltseghely érték: {source_cost_center}"))
         if invoice_status not in INVOICE_STATUS_VALUES:
-            issues.append(ValidationIssue("Státusz Számla", "UNKNOWN_INVOICE_STATUS", f"Ismeretlen Státusz Számla érték: {invoice_status}"))
+            issues.append(ValidationIssue("Státusz Számla", "UNKNOWN_INVOICE_STATUS",
+                                          f"Ismeretlen Státusz Számla érték: {invoice_status}"))
         if payment_status not in PAYMENT_STATUS_VALUES:
-            issues.append(ValidationIssue("Státusz fizetés", "UNKNOWN_PAYMENT_STATUS", f"Ismeretlen Státusz fizetés érték: {payment_status}"))
+            issues.append(ValidationIssue("Státusz fizetés", "UNKNOWN_PAYMENT_STATUS",
+                                          f"Ismeretlen Státusz fizetés érték: {payment_status}"))
 
         if net_amount_huf is not None and source_net is not None:
             calculated = Decimal(net_amount_huf)
@@ -211,7 +219,9 @@ class FinanceNormalizer:
                 )
 
         if transaction_type == "PURCHASE" and payment_status == "Fizetésre vár (vétel)" and not bank_account:
-            issues.append(ValidationIssue("Bankszámlaszám", "MISSING_BANK_ACCOUNT", "Vásárlási utaláshoz hiányzik a bankszámlaszám"))
+            issues.append(ValidationIssue("Bankszámlaszám", "MISSING_BANK_ACCOUNT",
+                                          "Vásárlási utaláshoz hiányzik a bankszámlaszám"))
+
 
         has_error = any(issue.severity == "ERROR" for issue in issues)
         has_warning = any(issue.severity == "WARNING" for issue in issues)
@@ -398,7 +408,8 @@ class FinanceNormalizer:
                     ),
                 )
 
-    def _replace_validation_issues(self, cur, transaction_id: int, sheet_row_id: int, issues: list[ValidationIssue]) -> None:
+    def _replace_validation_issues(self, cur, transaction_id: int, sheet_row_id: int,
+                                   issues: list[ValidationIssue]) -> None:
         cur.execute("DELETE FROM finance_validation_errors WHERE transaction_id = ?", (transaction_id,))
         timestamp = now_iso()
         for issue in issues:
@@ -429,11 +440,13 @@ class FinanceNormalizer:
             (transaction_type, now_iso(), sheet_row_id),
         )
 
-    def _parse_int(self, value: Any, field_name: str, issues: list[ValidationIssue], required: bool = False) -> int | None:
+    def _parse_int(self, value: Any, field_name: str, issues: list[ValidationIssue],
+                   required: bool = False) -> int | None:
         text = self._text(value)
         if not text:
             if required:
-                issues.append(ValidationIssue(field_name, "MISSING_REQUIRED_FIELD", f"Hiányzó kötelező mező: {field_name}"))
+                issues.append(
+                    ValidationIssue(field_name, "MISSING_REQUIRED_FIELD", f"Hiányzó kötelező mező: {field_name}"))
             return None
         try:
             return int(text)
@@ -441,11 +454,13 @@ class FinanceNormalizer:
             issues.append(ValidationIssue(field_name, "INVALID_INTEGER", f"Nem egész szám: {text}"))
             return None
 
-    def _parse_date(self, value: Any, field_name: str, issues: list[ValidationIssue], required: bool = False) -> str | None:
+    def _parse_date(self, value: Any, field_name: str, issues: list[ValidationIssue],
+                    required: bool = False) -> str | None:
         text = self._text(value)
         if not text:
             if required:
-                issues.append(ValidationIssue(field_name, "MISSING_REQUIRED_FIELD", f"Hiányzó kötelező mező: {field_name}"))
+                issues.append(
+                    ValidationIssue(field_name, "MISSING_REQUIRED_FIELD", f"Hiányzó kötelező mező: {field_name}"))
             return None
         for date_format in ("%m/%d/%Y", "%Y-%m-%d"):
             try:
@@ -467,12 +482,12 @@ class FinanceNormalizer:
         return mapped
 
     def _parse_money_int(
-        self,
-        value: Any,
-        field_name: str,
-        issues: list[ValidationIssue],
-        required: bool = False,
-        absolute: bool = True,
+            self,
+            value: Any,
+            field_name: str,
+            issues: list[ValidationIssue],
+            required: bool = False,
+            absolute: bool = True,
     ) -> int | None:
         amount = self._parse_money_decimal(value, field_name, issues, required, absolute)
         if amount is None:
@@ -480,17 +495,18 @@ class FinanceNormalizer:
         return int(amount.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
     def _parse_money_decimal(
-        self,
-        value: Any,
-        field_name: str,
-        issues: list[ValidationIssue],
-        required: bool = False,
-        absolute: bool = True,
+            self,
+            value: Any,
+            field_name: str,
+            issues: list[ValidationIssue],
+            required: bool = False,
+            absolute: bool = True,
     ) -> Decimal | None:
         text = self._text(value)
         if not text:
             if required:
-                issues.append(ValidationIssue(field_name, "MISSING_REQUIRED_FIELD", f"Hiányzó kötelező mező: {field_name}"))
+                issues.append(
+                    ValidationIssue(field_name, "MISSING_REQUIRED_FIELD", f"Hiányzó kötelező mező: {field_name}"))
             return None
         cleaned = text.replace("Ft", "").replace("€", "").replace(" ", "").replace(",", "")
         cleaned = re.sub(r"[^0-9.\-]", "", cleaned)
@@ -512,6 +528,75 @@ class FinanceNormalizer:
         vat = Decimal(vat_rate)
         net = gross / (Decimal("1") + vat)
         return str(net.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+    def _validate_sale_invoice_readiness(
+            self,
+            transaction_type: str,
+            source_cost_center: str,
+            invoice_status: str,
+            partner_name: str,
+            external_id: int | None,
+            transaction_date: str | None,
+            source_account: str,
+            gross_amount_huf: int | None,
+            vat_rate: str | None,
+            net_amount_huf: str | None,
+            car_name: str,
+            issues: list[ValidationIssue],
+    ) -> None:
+        sale_flow_types = {"SALE", "SALE_STOCK_90_DAYS"}
+
+        if transaction_type not in sale_flow_types:
+            return
+
+        if source_cost_center not in {"Eladás", "Eladás készlet 90 nap"}:
+            issues.append(
+                ValidationIssue(
+                    "Koltseghely",
+                    "INVALID_SALE_COST_CENTER",
+                    f"Eladás számlázáshoz nem engedélyezett költséghely: {source_cost_center}",
+                )
+            )
+
+        normalized_partner = (partner_name or "").strip().lower().replace(".", "")
+
+        if normalized_partner != "kocsiguru kft":
+            issues.append(
+                ValidationIssue(
+                    "Ügyfél",
+                    "INVALID_SALE_PARTNER",
+                    f"Eladás számlázáshoz az Ügyfél értéke csak 'Kocsiguru Kft.' lehet. Jelenlegi érték: {partner_name}",
+                )
+            )
+
+        if invoice_status != "Számlára vár":
+            issues.append(
+                ValidationIssue(
+                    "Státusz Számla",
+                    "INVALID_SALE_INVOICE_STATUS",
+                    f"Eladás számlázás csak 'Számlára vár' státusz esetén indulhat. Jelenlegi érték: {invoice_status}",
+                )
+            )
+
+        required_values = [
+            ("ID", external_id),
+            ("Datum", transaction_date),
+            ("Számla", source_account),
+            ("Osszeg (brutto)", gross_amount_huf),
+            ("Afa %", vat_rate),
+            ("Osszeg (netto)", net_amount_huf),
+            ("Autó", car_name),
+        ]
+
+        for field_name, value in required_values:
+            if value is None or value == "":
+                issues.append(
+                    ValidationIssue(
+                        field_name,
+                        "MISSING_SALE_INVOICE_REQUIRED_FIELD",
+                        f"Eladás számlázáshoz hiányzó kötelező mező: {field_name}",
+                    )
+                )
 
     def _validate_required_text(self, value: str, field_name: str, issues: list[ValidationIssue]) -> None:
         if not value:

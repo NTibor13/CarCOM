@@ -6,6 +6,7 @@ from fastapi.templating import Jinja2Templates
 from shared.database.schema import init_database
 from shared.database.connection import get_connection
 from services.main_service.app import run_pipeline_once
+from services.flow_service.flow_engine import evaluate_transaction
 
 app = FastAPI(title="CarCOM Dashboard")
 
@@ -15,14 +16,14 @@ templates = Jinja2Templates(directory="services/web_service/templates")
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard(
-    request: Request,
-    page: int = Query(1, ge=1),
-    search: str = "",
-    sort_by: str = "source_row_number",
-    sort_dir: str = "desc",
-    transaction_type: str = "",
-    normalized_status: str = "",
-    sync_status: str = "",
+        request: Request,
+        page: int = Query(1, ge=1),
+        search: str = "",
+        sort_by: str = "source_row_number",
+        sort_dir: str = "desc",
+        transaction_type: str = "",
+        normalized_status: str = "",
+        sync_status: str = "",
 ):
     init_database()
 
@@ -96,13 +97,23 @@ def dashboard(
                 transaction_date,
                 transaction_type,
                 car_name,
+                source_cost_center,
                 partner_name,
                 gross_amount_huf,
                 vat_rate,
                 net_amount_huf,
                 invoice_status,
                 payment_status,
-                normalized_status
+                normalized_status,
+                CASE
+                    WHEN transaction_type IN ('SALE', 'SALE_STOCK_90_DAYS')
+                     AND source_cost_center IN ('Eladás', 'Eladás készlet 90 nap')
+                     AND partner_name = 'Kocsiguru Kft.'
+                     AND invoice_status = 'Számlára vár'
+                     AND normalized_status = 'VALID'
+                    THEN 1
+                    ELSE 0
+                END AS billingo_ready
             FROM finance_transactions
             {where_sql}
             ORDER BY {sort_by} {sort_dir}
@@ -111,7 +122,14 @@ def dashboard(
             [*params, page_size, offset],
         )
 
-        rows = [dict(row) for row in cur.fetchall()]
+        rows = []
+
+        for row in cur.fetchall():
+            row_dict = dict(row)
+            flow_result = evaluate_transaction(row_dict)
+            row_dict["flow_action"] = flow_result["action"]
+            row_dict["flow_reason"] = flow_result["reason"]
+            rows.append(row_dict)
 
         cur.execute("""
             SELECT transaction_type, COUNT(*) AS count
@@ -171,13 +189,14 @@ def dashboard(
         },
     )
 
+
 @app.get("/validation-errors", response_class=HTMLResponse)
 def validation_errors(
-    request: Request,
-    page: int = Query(1, ge=1),
-    search: str = "",
-    severity: str = "",
-    error_code: str = "",
+        request: Request,
+        page: int = Query(1, ge=1),
+        search: str = "",
+        severity: str = "",
+        error_code: str = "",
 ):
     init_database()
 
@@ -287,10 +306,12 @@ def validation_errors(
         },
     )
 
+
 @app.post("/sync")
 def run_manual_sync():
     run_pipeline_once()
     return RedirectResponse(url="/?sync_status=success", status_code=303)
+
 
 import json
 from fastapi import HTTPException

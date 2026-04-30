@@ -151,6 +151,7 @@
                         <th>Számla státusz</th>
                         <th>Fizetés státusz</th>
                         <th>Validáció</th>
+                        <th>Flow</th>
                     </tr>
                     </thead>
                     <tbody>
@@ -173,6 +174,13 @@
                         <td>{{ row.payment_status or "" }}</td>
                         <td><span
                                 class="status status-{{ row.normalized_status|lower }}">{{ row.normalized_status }}</span>
+                        </td>
+                        <td>
+                            {% if row.flow_action == "BILLINGO_DRAFT_REQUIRED" %}
+                            <span class="status status-warning">Számlázandó</span>
+                            {% else %}
+                            <span class="status">Nincs teendő</span>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}

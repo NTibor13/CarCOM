@@ -4,6 +4,7 @@ from services.billingo_service.billingo_client import (
     BillingoApiError,
     create_draft_document,
     get_document,
+    download_document,
 )
 from services.billingo_service.billingo_payload_builder import build_billingo_payload
 from services.billingo_service.invoice_link_repository import (
@@ -176,3 +177,53 @@ def _extract_billingo_document_number(response: dict) -> str | None:
         or response.get("number")
     )
     return str(value) if value is not None else None
+
+def download_document_step(context: dict) -> dict:
+    transaction_id = int(context["transaction_id"])
+
+    active_link = get_active_invoice_link(transaction_id)
+    if not active_link:
+        raise RuntimeError(
+            f"No active Billingo invoice link found for transaction: {transaction_id}"
+        )
+
+    billingo_document_id = int(active_link["billingo_document_id"])
+
+    try:
+        pdf_content = download_document(billingo_document_id)
+
+        api_log_id = log_api_call(
+            provider="Billingo",
+            endpoint=f"/documents/{billingo_document_id}/download",
+            method="GET",
+            transaction_id=transaction_id,
+            request_payload=None,
+            response_status=200,
+            response_payload={
+                "content_type": "application/pdf",
+                "size_bytes": len(pdf_content),
+            },
+            success=True,
+        )
+
+        return {
+            "status": "downloaded",
+            "billingo_document_id": billingo_document_id,
+            "invoice_link_id": active_link["id"],
+            "api_log_id": api_log_id,
+            "size_bytes": len(pdf_content),
+        }
+
+    except BillingoApiError as exc:
+        log_api_call(
+            provider="Billingo",
+            endpoint=f"/documents/{billingo_document_id}/download",
+            method="GET",
+            transaction_id=transaction_id,
+            request_payload=None,
+            response_status=exc.status_code,
+            response_payload=exc.response_data,
+            success=False,
+            error_message=str(exc),
+        )
+        raise

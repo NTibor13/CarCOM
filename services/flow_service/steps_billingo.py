@@ -15,6 +15,12 @@ from services.billingo_service.invoice_link_repository import (
 )
 from services.flow_service.flow_engine import evaluate_transaction
 
+from pathlib import Path
+
+from shared.config.settings import settings
+from services.sync_service.google_drive_client import GoogleDriveClient
+from services.billingo_service.invoice_completion_service import _build_invoice_file_name
+
 
 def create_billingo_draft_step(context: dict) -> dict:
     transaction_id = int(context["transaction_id"])
@@ -72,17 +78,17 @@ def create_billingo_draft_step(context: dict) -> dict:
             error_message = ""
             if isinstance(exc.response_data, dict):
                 error_message = (
-                    exc.response_data.get("error", {}).get("message")
-                    or exc.response_data.get("message")
-                    or ""
+                        exc.response_data.get("error", {}).get("message")
+                        or exc.response_data.get("message")
+                        or ""
                 )
 
             is_missing_document_error = (
-                exc.status_code == 404
-                or (
-                    exc.status_code == 403
-                    and "invalid" in error_message.lower()
-                )
+                    exc.status_code == 404
+                    or (
+                            exc.status_code == 403
+                            and "invalid" in error_message.lower()
+                    )
             )
 
             if is_missing_document_error:
@@ -172,14 +178,16 @@ def _extract_billingo_document_id(response: dict) -> int | None:
 
 def _extract_billingo_document_number(response: dict) -> str | None:
     value = (
-        response.get("invoice_number")
-        or response.get("document_number")
-        or response.get("number")
+            response.get("invoice_number")
+            or response.get("document_number")
+            or response.get("number")
     )
     return str(value) if value is not None else None
 
+
 def download_document_step(context: dict) -> dict:
     transaction_id = int(context["transaction_id"])
+    transaction = _get_transaction(transaction_id)
 
     active_link = get_active_invoice_link(transaction_id)
     if not active_link:
@@ -192,6 +200,18 @@ def download_document_step(context: dict) -> dict:
     try:
         pdf_content = download_document(billingo_document_id)
 
+        tmp_dir = Path("data/tmp/invoices")
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+
+        file_name = _build_invoice_file_name(
+            transaction=transaction,
+            billingo_document_id=billingo_document_id,
+            billingo_document_number=active_link.get("billingo_document_number"),
+        )
+
+        file_path = tmp_dir / file_name
+        file_path.write_bytes(pdf_content)
+
         api_log_id = log_api_call(
             provider="Billingo",
             endpoint=f"/documents/{billingo_document_id}/download",
@@ -202,6 +222,7 @@ def download_document_step(context: dict) -> dict:
             response_payload={
                 "content_type": "application/pdf",
                 "size_bytes": len(pdf_content),
+                "file_path": str(file_path),
             },
             success=True,
         )
@@ -212,6 +233,8 @@ def download_document_step(context: dict) -> dict:
             "invoice_link_id": active_link["id"],
             "api_log_id": api_log_id,
             "size_bytes": len(pdf_content),
+            "file_name": file_name,
+            "file_path": str(file_path),
         }
 
     except BillingoApiError as exc:
@@ -227,3 +250,119 @@ def download_document_step(context: dict) -> dict:
             error_message=str(exc),
         )
         raise
+
+def upload_to_drive_step(context: dict) -> dict:
+    transaction_id = int(context["transaction_id"])
+    transaction = _get_transaction(transaction_id)
+
+    existing_document = _get_existing_invoice_document(transaction_id)
+    if existing_document:
+        return {
+            "status": "already_uploaded",
+            "document_id": existing_document["id"],
+            "drive_link": existing_document["file_url"],
+            "file_name": existing_document["file_name"],
+        }
+
+    active_link = get_active_invoice_link(transaction_id)
+    if not active_link:
+        raise RuntimeError(
+            f"No active Billingo invoice link found for transaction: {transaction_id}"
+        )
+
+    billingo_document_id = int(active_link["billingo_document_id"])
+
+    file_name = _build_invoice_file_name(
+        transaction=transaction,
+        billingo_document_id=billingo_document_id,
+        billingo_document_number=active_link.get("billingo_document_number"),
+    )
+
+    file_path = Path("data/tmp/invoices") / file_name
+
+    if file_path.exists():
+        pdf_content = file_path.read_bytes()
+    else:
+        pdf_content = download_document(billingo_document_id)
+
+    drive_file = GoogleDriveClient().upload_pdf(
+        file_name=file_name,
+        content=pdf_content,
+        folder_id=settings.billingo_invoice_drive_folder_id,
+    )
+
+    document_id = _create_invoice_document(
+        transaction_id=transaction_id,
+        file_name=file_name,
+        file_url=drive_file["webViewLink"],
+        raw_value=drive_file["id"],
+    )
+
+    return {
+        "status": "uploaded",
+        "document_id": document_id,
+        "billingo_document_id": billingo_document_id,
+        "drive_file_id": drive_file["id"],
+        "drive_link": drive_file["webViewLink"],
+        "file_name": file_name,
+    }
+
+def _get_existing_invoice_document(transaction_id: int) -> dict | None:
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT *
+            FROM finance_transaction_documents
+            WHERE transaction_id = ?
+              AND document_type = ?
+              AND source_column = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (
+                transaction_id,
+                "INVOICE",
+                "Számla link",
+            ),
+        )
+        row = cur.fetchone()
+
+    return dict(row) if row else None
+
+
+def _create_invoice_document(
+    transaction_id: int,
+    file_name: str,
+    file_url: str,
+    raw_value: str,
+) -> int:
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO finance_transaction_documents (
+                transaction_id,
+                document_type,
+                source_column,
+                file_name,
+                file_url,
+                raw_value,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """,
+            (
+                transaction_id,
+                "INVOICE",
+                "Számla link",
+                file_name,
+                file_url,
+                raw_value,
+            ),
+        )
+
+        document_id = cur.lastrowid
+        conn.commit()
+
+    return document_id

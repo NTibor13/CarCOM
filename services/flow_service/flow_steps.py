@@ -1,6 +1,7 @@
 from services.flow_service.steps_billingo import (
     create_billingo_draft_step,
     download_document_step,
+    upload_to_drive_step,
 )
 
 SALE_FLOW_STEPS = [
@@ -39,7 +40,7 @@ def placeholder_step_handler(context: dict) -> dict:
 STEP_HANDLERS = {
     "CREATE_BILLINGO_DRAFT": create_billingo_draft_step,
     "DOWNLOAD_DOCUMENT": download_document_step,
-    "UPLOAD_TO_DRIVE": placeholder_step_handler,
+    "UPLOAD_TO_DRIVE": upload_to_drive_step,
     "UPDATE_SHEET_STATUS": placeholder_step_handler,
     "UPDATE_SHEET_LINK": placeholder_step_handler,
 }

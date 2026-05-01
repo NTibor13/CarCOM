@@ -83,3 +83,121 @@ def get_document(document_id: int) -> dict:
         )
 
     return response_data
+
+def download_document(document_id: int) -> bytes:
+    try:
+        return _download_document_pdf(document_id)
+    except BillingoApiError as exc:
+        if exc.status_code == 202:
+            return print_pos_document(document_id)
+
+        raise
+
+
+def _download_document_pdf(document_id: int) -> bytes:
+    api_key = os.getenv("BILLINGO_API_KEY")
+    base_url = os.getenv("BILLINGO_API_BASE_URL", "https://api.billingo.hu/v3")
+
+    if not api_key:
+        raise BillingoApiError("Missing BILLINGO_API_KEY environment variable")
+
+    url = f"{base_url}/documents/{document_id}/download"
+
+    response = requests.get(
+        url,
+        headers={
+            "X-API-KEY": api_key,
+            "Accept": "application/pdf",
+        },
+        timeout=30,
+    )
+
+    if response.status_code != 200:
+        try:
+            response_data = response.json()
+        except ValueError:
+            response_data = {"raw_response": response.text}
+
+        raise BillingoApiError(
+            f"Billingo document download error {response.status_code}: {response_data}",
+            status_code=response.status_code,
+            response_data=response_data,
+        )
+
+    return response.content
+
+
+def download_document(document_id: int) -> bytes:
+    try:
+        return _download_document_pdf(document_id)
+    except BillingoApiError as exc:
+        if exc.status_code == 202:
+            return print_pos_document(document_id)
+
+        raise
+
+
+def _download_document_pdf(document_id: int) -> bytes:
+    api_key = os.getenv("BILLINGO_API_KEY")
+    base_url = os.getenv("BILLINGO_API_BASE_URL", "https://api.billingo.hu/v3")
+
+    if not api_key:
+        raise BillingoApiError("Missing BILLINGO_API_KEY environment variable")
+
+    url = f"{base_url}/documents/{document_id}/download"
+
+    response = requests.get(
+        url,
+        headers={
+            "X-API-KEY": api_key,
+            "Accept": "application/pdf",
+        },
+        timeout=30,
+    )
+
+    if response.status_code != 200:
+        try:
+            response_data = response.json()
+        except ValueError:
+            response_data = {"raw_response": response.text}
+
+        raise BillingoApiError(
+            f"Billingo document download error {response.status_code}: {response_data}",
+            status_code=response.status_code,
+            response_data=response_data,
+        )
+
+    return response.content
+
+
+def print_pos_document(document_id: int) -> bytes:
+    api_key = os.getenv("BILLINGO_API_KEY")
+    base_url = os.getenv("BILLINGO_API_BASE_URL", "https://api.billingo.hu/v3")
+
+    if not api_key:
+        raise BillingoApiError("Missing BILLINGO_API_KEY environment variable")
+
+    url = f"{base_url}/documents/{document_id}/print/pos"
+
+    response = requests.get(
+        url,
+        headers={
+            "X-API-KEY": api_key,
+            "Accept": "application/pdf",
+        },
+        timeout=30,
+    )
+
+    if response.status_code != 200:
+        try:
+            response_data = response.json()
+        except ValueError:
+            response_data = {"raw_response": response.text}
+
+        raise BillingoApiError(
+            f"Billingo POS print error {response.status_code}: {response_data}",
+            status_code=response.status_code,
+            response_data=response_data,
+        )
+
+    return response.content

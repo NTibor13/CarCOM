@@ -11,6 +11,7 @@ from services.billingo_service.invoice_link_repository import (
     mark_invoice_link_confirmed,
     mark_invoice_link_missing,
 )
+from services.billingo_service.invoice_completion_service import complete_invoice_process
 
 
 def _extract_billingo_document_id(response: dict) -> int | None:
@@ -116,17 +117,26 @@ def ensure_billingo_draft_for_transaction(transaction: dict) -> dict:
                 response_data=response,
             )
 
+        billingo_document_number = _extract_billingo_document_number(response)
+
         create_invoice_link(
             transaction_id=transaction_id,
             billingo_document_id=billingo_document_id,
-            billingo_document_number=_extract_billingo_document_number(response),
+            billingo_document_number=billingo_document_number,
             status="DRAFT_CREATED",
             api_log_id=api_log_id,
+        )
+
+        completion_result = complete_invoice_process(
+            transaction=transaction,
+            billingo_document_id=billingo_document_id,
+            billingo_document_number=billingo_document_number,
         )
 
         return {
             "status": "created",
             "billingo_response": response,
+            "completion_result": completion_result,
         }
 
     except BillingoApiError as exc:

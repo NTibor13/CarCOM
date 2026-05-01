@@ -439,27 +439,28 @@ def approve_billingo_draft(transaction_id: int):
                 status_code=303,
             )
 
+        if result["status"] == "created":
             return RedirectResponse(
-                url=f"/transactions/{transaction_id}?approval_status=billingo_error",
+                url=f"/transactions/{transaction_id}?approval_status=approved",
                 status_code=303,
             )
 
-        print(
-            "[FLOW APPROVAL] Billingo draft approved",
-            {
-                "transaction_id": transaction_id,
-                "source_row_number": transaction.get("source_row_number"),
-                "car_name": transaction.get("car_name"),
-                "partner_name": transaction.get("partner_name"),
-                "amount": transaction.get("net_amount_huf"),
-            },
+        if result["status"] == "created":
+            print(
+                "[FLOW APPROVAL] Billingo draft created + completed",
+                {
+                    "transaction_id": transaction_id,
+                    "source_row_number": transaction.get("source_row_number"),
+                    "car_name": transaction.get("car_name"),
+                    "partner_name": transaction.get("partner_name"),
+                    "amount": transaction.get("net_amount_huf"),
+                },
+            )
+
+        return RedirectResponse(
+            url=f"/transactions/{transaction_id}?approval_status=billingo_error",
+            status_code=303,
         )
-
-    return RedirectResponse(
-        url=f"/transactions/{transaction_id}?approval_status=approved",
-        status_code=303,
-    )
-
 
 @app.get("/api-logs", response_class=HTMLResponse)
 def api_logs(

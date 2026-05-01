@@ -1,17 +1,21 @@
-from google.oauth2 import service_account
+import os
+
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
 from shared.config.settings import settings
 
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive.file",
+]
 
 
 class GoogleSheetsClient:
     def __init__(self) -> None:
-        self.credentials = service_account.Credentials.from_service_account_file(
-            settings.google_credentials_file,
-            scopes=SCOPES,
-        )
+        self.credentials = self._load_oauth_credentials()
         self.service = build("sheets", "v4", credentials=self.credentials)
 
     def read_values(self) -> list[list[str]]:
@@ -176,3 +180,199 @@ class GoogleSheetsClient:
                 seen.add(key)
 
         return unique_links
+
+    def update_row_values(self, row_number: int, values_by_header: dict[str, str]) -> None:
+        header_range = f"'{settings.google_worksheet_name}'!1:1"
+
+        header_result = (
+            self.service.spreadsheets()
+            .values()
+            .get(
+                spreadsheetId=settings.google_sheet_id,
+                range=header_range,
+            )
+            .execute()
+        )
+
+        headers = [h.strip() for h in header_result.get("values", [[]])[0]]
+
+        updates = []
+
+        for header_name, value in values_by_header.items():
+            header_name = header_name.strip()
+            if header_name not in headers:
+                raise ValueError(f"Google Sheet column not found: {header_name}")
+
+            col_index = headers.index(header_name)
+            col_letter = self._column_index_to_letter(col_index + 1)
+
+            updates.append({
+                "range": f"'{settings.google_worksheet_name}'!{col_letter}{row_number}",
+                "values": [[value]],
+            })
+
+        if not updates:
+            return
+
+        (
+            self.service.spreadsheets()
+            .values()
+            .batchUpdate(
+                spreadsheetId=settings.google_sheet_id,
+                body={
+                    "valueInputOption": "USER_ENTERED",
+                    "data": updates,
+                },
+            )
+            .execute()
+        )
+
+    def _column_index_to_letter(self, index: int) -> str:
+        letters = ""
+
+        while index:
+            index, remainder = divmod(index - 1, 26)
+            letters = chr(65 + remainder) + letters
+
+        return letters
+
+    def update_drive_file_chip(
+            self,
+            row_number: int,
+            header_name: str,
+            file_id: str,
+            display_text: str = "Számla",
+    ) -> None:
+        sheet_id = self._get_sheet_id()
+        column_index = self._get_column_index_by_header(header_name)
+
+        self.service.spreadsheets().batchUpdate(
+            spreadsheetId=settings.google_sheet_id,
+            body={
+                "requests": [
+                    {
+                        "updateCells": {
+                            "range": {
+                                "sheetId": sheet_id,
+                                "startRowIndex": row_number - 1,
+                                "endRowIndex": row_number,
+                                "startColumnIndex": column_index,
+                                "endColumnIndex": column_index + 1,
+                            },
+                            "rows": [
+                                {
+                                    "values": [
+                                        {
+                                            "userEnteredValue": {
+                                                "stringValue": "@"
+                                            },
+                                            "chipRuns": [
+                                                {
+                                                    "startIndex": 0,
+                                                    "chip": {
+                                                        "richLinkProperties": {
+                                                            "uri": f"https://drive.google.com/file/d/{file_id}/view"
+                                                        }
+                                                    },
+                                                }
+                                            ],
+                                        }
+                                    ]
+                                }
+                            ],
+                            "fields": "userEnteredValue,chipRuns",
+                        }
+                    }
+                ]
+            },
+        ).execute()
+
+    def _get_sheet_id(self) -> int:
+        spreadsheet = (
+            self.service.spreadsheets()
+            .get(
+                spreadsheetId=settings.google_sheet_id,
+                fields="sheets.properties",
+            )
+            .execute()
+        )
+
+        for sheet in spreadsheet["sheets"]:
+            properties = sheet["properties"]
+            if properties["title"] == settings.google_worksheet_name:
+                return properties["sheetId"]
+
+        raise ValueError(f"Google worksheet not found: {settings.google_worksheet_name}")
+
+    def _get_column_index_by_header(self, header_name: str) -> int:
+        header_range = f"'{settings.google_worksheet_name}'!1:1"
+
+        header_result = (
+            self.service.spreadsheets()
+            .values()
+            .get(
+                spreadsheetId=settings.google_sheet_id,
+                range=header_range,
+            )
+            .execute()
+        )
+
+        headers = [
+            str(h).strip()
+            for h in header_result.get("values", [[]])[0]
+        ]
+
+        normalized_header_name = header_name.strip()
+
+        if normalized_header_name not in headers:
+            raise ValueError(f"Google Sheet column not found: {header_name}")
+
+        return headers.index(normalized_header_name)
+
+    def _load_oauth_credentials(self) -> Credentials:
+        credentials = None
+
+        token_file = settings.google_oauth_token_file
+        client_file = settings.google_oauth_client_file
+
+        if os.path.exists(token_file):
+            credentials = Credentials.from_authorized_user_file(
+                token_file,
+                SCOPES,
+            )
+
+        if credentials and credentials.valid:
+            return credentials
+
+        if credentials and credentials.expired and credentials.refresh_token:
+            credentials.refresh(Request())
+            self._save_credentials(credentials)
+            return credentials
+
+        if not os.path.exists(client_file):
+            raise FileNotFoundError(
+                f"Google OAuth client file not found: {client_file}"
+            )
+
+        flow = InstalledAppFlow.from_client_secrets_file(
+            client_file,
+            SCOPES,
+        )
+
+        credentials = flow.run_local_server(
+            port=0,
+            prompt="consent",
+        )
+
+        self._save_credentials(credentials)
+        return credentials
+
+    def _save_credentials(self, credentials: Credentials) -> None:
+        token_file = settings.google_oauth_token_file
+        token_dir = os.path.dirname(token_file)
+
+        if token_dir:
+            os.makedirs(token_dir, exist_ok=True)
+
+        with open(token_file, "w", encoding="utf-8") as token:
+            token.write(credentials.to_json())

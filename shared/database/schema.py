@@ -184,6 +184,51 @@ def init_database() -> None:
             )
         """)
 
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS flow_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                transaction_id INTEGER NOT NULL,
+                flow_type TEXT NOT NULL,
+                status TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                finished_at TEXT,
+                error_message TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(transaction_id, flow_type),
+                FOREIGN KEY(transaction_id) REFERENCES finance_transactions(id)
+            )
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS flow_step_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                flow_run_id INTEGER NOT NULL,
+                step_name TEXT NOT NULL,
+                step_order INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                started_at TEXT,
+                finished_at TEXT,
+                input_json TEXT,
+                output_json TEXT,
+                error_message TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(flow_run_id, step_name),
+                FOREIGN KEY(flow_run_id) REFERENCES flow_runs(id)
+            )
+        """)
+
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_flow_runs_transaction
+            ON flow_runs(transaction_id, flow_type)
+        """)
+
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_flow_step_logs_run
+            ON flow_step_logs(flow_run_id, step_order)
+        """)
+
         _seed_lookup_values(cur)
 
         conn.commit()

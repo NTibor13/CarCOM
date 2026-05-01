@@ -22,10 +22,23 @@
         <header class="topbar">
             <div>
                 <h1>{{ transaction.car_name or "Tranzakció részletek" }}</h1>
-                <p>
-                    Google sor: {{ transaction.source_row_number }}
-                    · Külső ID: {{ transaction.external_id or "-" }}
-                    · Típus: {{ transaction.transaction_type }}
+                <div class="internal-id">
+                    Internal ID: {{ transaction.id }}
+                </div>
+                <p class="transaction-meta">
+                    <span>Google sor: {{ transaction.source_row_number }}</span>
+                    <span>· Külső ID: {{ transaction.external_id or "-" }}</span>
+                    <span class="type-badge type-{{ transaction.transaction_type|lower|replace('_', '-') }}">
+                        {% if transaction.transaction_type == "SALE" %}
+                            ELADÁS
+                        {% elif transaction.transaction_type == "PURCHASE" %}
+                            VÉTEL
+                        {% elif transaction.transaction_type == "SALE_STOCK_90_DAYS" %}
+                            VÉTEL (90 NAP)
+                        {% else %}
+                            {{ transaction.transaction_type }}
+                        {% endif %}
+                    </span>
                 </p>
             </div>
 
@@ -35,15 +48,21 @@
         <section class="cards">
             <div class="card">
                 <span>Bruttó összeg</span>
-                <strong>{{ "{:,}".format(transaction.gross_amount_huf or 0).replace(",", " ") }} Ft</strong>
+                <strong>{{ "{:,.0f}".format((transaction.gross_amount_huf or 0)|float).replace(",", " ") }} Ft</strong>
             </div>
             <div class="card">
                 <span>ÁFA</span>
-                <strong>{{ transaction.vat_rate }}</strong>
+                <strong>
+                    {% if transaction.vat_rate in ["0", "0.0", 0] %}
+                    K.ÁFA
+                    {% else %}
+                    {{ (transaction.vat_rate|float * 100)|round(0)|int }}%
+                    {% endif %}
+                </strong>
             </div>
             <div class="card">
                 <span>Nettó összeg</span>
-                <strong>{{ transaction.net_amount_huf }}</strong>
+                <strong>{{ "{:,.0f}".format((transaction.net_amount_huf or 0)|float).replace(",", " ") }} Ft</strong>
             </div>
             <div class="card">
                 <span>Validáció</span>
@@ -96,37 +115,24 @@
             {% endif %}
         </section>
         {% endif %}
-        {% if billingo_invoice_link %}
-        <section class="card">
-            <h2>Billingo kapcsolat</h2>
+        <section class="panel flow-timeline-panel" id="flow-container" data-transaction-id="{{ transaction.id }}">
+            <div class="section-header">
+                <div>
+                    <h2>Folyamat állapota</h2>
+                    <p>A számlázási folyamat lépései és aktuális eredménye.</p>
+                </div>
 
-            <p>
-                <strong>Státusz:</strong>
-                {{ billingo_invoice_link.status }}
-            </p>
+                <span id="flow-status" class="flow-status-pill flow-status-loading">
+            Betöltés...
+        </span>
+            </div>
 
-            <p>
-                <strong>Billingo dokumentum ID:</strong>
-                {{ billingo_invoice_link.billingo_document_id }}
-            </p>
+            <div id="flow-empty" class="empty-state" style="display: none;">
+                Ehhez a tranzakcióhoz még nem indult folyamat.
+            </div>
 
-            <p>
-                <strong>Dokumentumszám:</strong>
-                {{ billingo_invoice_link.billingo_document_number or "-" }}
-            </p>
-
-            <p>
-                <strong>Utolsó ellenőrzés:</strong>
-                {{ billingo_invoice_link.last_checked_at or "-" }}
-            </p>
-
-            {% if billingo_invoice_link.status == "DRAFT_MISSING" %}
-            <p>
-                A korábbi Billingo draft már nem található Billingóban, ezért új draft generálható.
-            </p>
-            {% endif %}
+            <div id="flow-steps" class="flow-timeline"></div>
         </section>
-        {% endif %}
         <section class="panel details-grid">
             <div>
                 <h2>Normalizált adatok</h2>
@@ -186,53 +192,6 @@
                 {% endif %}
             </div>
         </section>
-        <div id="flow-container">
-            <h3>Flow</h3>
-
-            <div id="flow-status">Loading...</div>
-
-            <ul id="flow-steps"></ul>
-        </div>
-
-        <script>
-            async function loadFlow(transactionId) {
-                const res = await fetch(`/api/flow/${transactionId}`);
-                const data = await res.json();
-
-                const statusDiv = document.getElementById("flow-status");
-                const stepsUl = document.getElementById("flow-steps");
-
-                if (!data.flow_run) {
-                    statusDiv.innerText = "No flow yet";
-                    return;
-                }
-
-                statusDiv.innerText = `Status: ${data.flow_run.status}`;
-
-                stepsUl.innerHTML = "";
-
-                data.steps.forEach(step => {
-                    const li = document.createElement("li");
-
-                    let icon = "⏳";
-                    if (step.status === "SUCCESS") icon = "✔";
-                    if (step.status === "FAILED") icon = "❌";
-                    if (step.status === "SKIPPED") icon = "⏭";
-
-                    li.innerText = `${icon} ${step.step_name} (${step.status})`;
-
-                    stepsUl.appendChild(li);
-                });
-            }
-
-            // fontos: itt legyen meg a transaction ID a template-ben
-            loadFlow({
-            {
-                transaction.id
-            }
-            })
-            ;
-        </script>
         <section class="panel">
             <h2>Dokumentumok</h2>
 
@@ -275,4 +234,103 @@
     </main>
 </div>
 </body>
+<script>
+    async function loadFlow() {
+        const container = document.getElementById("flow-container");
+        const transactionId = container.dataset.transactionId;
+
+        const statusEl = document.getElementById("flow-status");
+        const stepsEl = document.getElementById("flow-steps");
+        const emptyEl = document.getElementById("flow-empty");
+
+        try {
+            const res = await fetch(`/api/flow/${transactionId}`);
+
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}`);
+            }
+
+            const data = await res.json();
+
+            if (!data.flow_run) {
+                statusEl.innerText = "Nincs flow";
+                statusEl.className = "flow-status-pill flow-status-empty";
+                emptyEl.style.display = "block";
+                stepsEl.innerHTML = "";
+                return;
+            }
+
+            const flowStatus = data.flow_run.status;
+
+            statusEl.innerText = flowStatus;
+            statusEl.className = `flow-status-pill flow-status-${flowStatus.toLowerCase()}`;
+
+            emptyEl.style.display = "none";
+            stepsEl.innerHTML = "";
+
+            data.steps.forEach((step, index) => {
+                const item = document.createElement("div");
+                item.className = `flow-step flow-step-${step.status.toLowerCase()}`;
+
+                const icon = document.createElement("div");
+                icon.className = "flow-step-icon";
+                icon.innerText = getStepIcon(step.status);
+
+                const content = document.createElement("div");
+                content.className = "flow-step-content";
+
+                const title = document.createElement("div");
+                title.className = "flow-step-title";
+                title.innerText = getStepLabel(step.step_name);
+
+                const meta = document.createElement("div");
+                meta.className = "flow-step-meta";
+                meta.innerText = `${step.status}${step.finished_at ? " · " + step.finished_at : ""}`;
+
+                content.appendChild(title);
+                content.appendChild(meta);
+
+                if (step.error_message) {
+                    const error = document.createElement("div");
+                    error.className = "flow-step-error";
+                    error.innerText = step.error_message;
+                    content.appendChild(error);
+                }
+
+                item.appendChild(icon);
+                item.appendChild(content);
+
+                stepsEl.appendChild(item);
+            });
+        } catch (error) {
+            statusEl.innerText = "Hiba";
+            statusEl.className = "flow-status-pill flow-status-failed";
+            stepsEl.innerHTML = "";
+            emptyEl.style.display = "block";
+            emptyEl.innerText = "A flow állapot betöltése sikertelen.";
+        }
+    }
+
+    function getStepIcon(status) {
+        if (status === "SUCCESS") return "✓";
+        if (status === "FAILED") return "!";
+        if (status === "SKIPPED") return "↷";
+        if (status === "RUNNING") return "…";
+        return "•";
+    }
+
+    function getStepLabel(stepName) {
+        const labels = {
+            CREATE_BILLINGO_DRAFT: "Billingo piszkozat létrehozása",
+            DOWNLOAD_DOCUMENT: "Számlakép letöltése",
+            UPLOAD_TO_DRIVE: "Feltöltés Google Drive-ra",
+            UPDATE_SHEET_STATUS: "Google Sheet státusz frissítése",
+            UPDATE_SHEET_LINK: "Számla link beszúrása"
+        };
+
+        return labels[stepName] || stepName;
+    }
+
+    loadFlow();
+</script>
 </html>

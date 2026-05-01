@@ -12,7 +12,7 @@ def log_api_call(
     response_payload: dict | None,
     success: bool,
     error_message: str | None = None,
-) -> None:
+) -> int:
     with get_connection() as conn:
         cur = conn.cursor()
         cur.execute(
@@ -42,4 +42,6 @@ def log_api_call(
                 error_message,
             ),
         )
+        log_id = cur.lastrowid
         conn.commit()
+        return log_id

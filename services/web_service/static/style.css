@@ -507,6 +507,12 @@ tbody tr:hover {
   border: 1px solid #bbf7d0;
 }
 
+.flow-message-warning {
+  background: #fee2e2;
+  color: #f19953;
+  border: 1px solid #fee1ca;
+}
+
 .flow-message-error {
   background: #fee2e2;
   color: #991b1b;

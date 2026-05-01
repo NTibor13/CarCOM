@@ -7,9 +7,9 @@ from shared.database.schema import init_database
 from shared.database.connection import get_connection
 from services.main_service.app import run_pipeline_once
 from services.flow_service.flow_engine import evaluate_transaction
-from services.billingo_service.billingo_payload_builder import build_billingo_payload
-from services.billingo_service.billingo_client import create_draft_document, BillingoApiError
-from services.billingo_service.api_call_logger import log_api_call
+from services.billingo_service.billingo_client import BillingoApiError
+from services.billingo_service.document_service import ensure_billingo_draft_for_transaction
+from services.billingo_service.invoice_link_repository import get_latest_invoice_link
 
 app = FastAPI(title="CarCOM Dashboard")
 
@@ -323,7 +323,7 @@ from fastapi import HTTPException
 
 
 @app.get("/transactions/{transaction_id}", response_class=HTMLResponse)
-def transaction_details(request: Request, transaction_id: int, approval_status: str = "",):
+def transaction_details(request: Request, transaction_id: int, approval_status: str = "", ):
     init_database()
 
     with get_connection() as conn:
@@ -377,6 +377,8 @@ def transaction_details(request: Request, transaction_id: int, approval_status: 
         """, (transaction_id,))
         documents = [dict(row) for row in cur.fetchall()]
 
+        billingo_invoice_link = get_latest_invoice_link(transaction_id)
+
     return templates.TemplateResponse(
         "transaction_details.html",
         {
@@ -386,8 +388,10 @@ def transaction_details(request: Request, transaction_id: int, approval_status: 
             "documents": documents,
             "raw_json_pretty": raw_json_pretty,
             "approval_status": approval_status,
+            "billingo_invoice_link": billingo_invoice_link,
         },
     )
+
 
 @app.post("/transactions/{transaction_id}/approve-billingo")
 def approve_billingo_draft(transaction_id: int):
@@ -418,40 +422,22 @@ def approve_billingo_draft(transaction_id: int):
                 status_code=303,
             )
 
-        payload = build_billingo_payload(transaction)
-
-        print("[BILLINGO PAYLOAD]", payload)
-
         try:
-            billingo_response = create_draft_document(payload)
-
-            log_api_call(
-                provider="Billingo",
-                endpoint="/documents",
-                method="POST",
-                transaction_id=transaction_id,
-                request_payload=payload,
-                response_status=201,
-                response_payload=billingo_response,
-                success=True,
-            )
-
-            print("[BILLINGO RESPONSE]", billingo_response)
+            result = ensure_billingo_draft_for_transaction(transaction)
 
         except BillingoApiError as exc:
-            log_api_call(
-                provider="Billingo",
-                endpoint="/documents",
-                method="POST",
-                transaction_id=transaction_id,
-                request_payload=payload,
-                response_status=exc.status_code,
-                response_payload=exc.response_data,
-                success=False,
-                error_message=str(exc),
+            print("[BILLINGO ERROR]", str(exc))
+
+            return RedirectResponse(
+                url=f"/transactions/{transaction_id}?approval_status=billingo_error",
+                status_code=303,
             )
 
-            print("[BILLINGO ERROR]", str(exc))
+        if result["status"] == "already_exists":
+            return RedirectResponse(
+                url=f"/transactions/{transaction_id}?approval_status=billingo_already_exists",
+                status_code=303,
+            )
 
             return RedirectResponse(
                 url=f"/transactions/{transaction_id}?approval_status=billingo_error",
@@ -474,12 +460,13 @@ def approve_billingo_draft(transaction_id: int):
         status_code=303,
     )
 
+
 @app.get("/api-logs", response_class=HTMLResponse)
 def api_logs(
-    request: Request,
-    page: int = Query(1, ge=1),
-    provider: str = "",
-    success: str = "",
+        request: Request,
+        page: int = Query(1, ge=1),
+        provider: str = "",
+        success: str = "",
 ):
     init_database()
 
@@ -556,6 +543,7 @@ def api_logs(
             "success": success,
         },
     )
+
 
 @app.get("/api-logs/{log_id}", response_class=HTMLResponse)
 def api_log_detail(request: Request, log_id: int):

@@ -84,6 +84,10 @@
             <div class="flow-message flow-message-error">
                 Ez a tranzakció jelenleg nem kiszámlázható.
             </div>
+            {% elif approval_status == "billingo_already_exists" %}
+            <div class="flow-message flow-message-warning">
+                A Billingo számladraft már létezik, ezért nem hoztunk létre újat.
+            </div>
             {% elif approval_status == "billingo_error" %}
             <div class="flow-message flow-message-error">
                 A Billingo számladraft létrehozása sikertelen volt. Részletek a szerver logban.
@@ -91,7 +95,37 @@
             {% endif %}
         </section>
         {% endif %}
+        {% if billingo_invoice_link %}
+        <section class="card">
+            <h2>Billingo kapcsolat</h2>
 
+            <p>
+                <strong>Státusz:</strong>
+                {{ billingo_invoice_link.status }}
+            </p>
+
+            <p>
+                <strong>Billingo dokumentum ID:</strong>
+                {{ billingo_invoice_link.billingo_document_id }}
+            </p>
+
+            <p>
+                <strong>Dokumentumszám:</strong>
+                {{ billingo_invoice_link.billingo_document_number or "-" }}
+            </p>
+
+            <p>
+                <strong>Utolsó ellenőrzés:</strong>
+                {{ billingo_invoice_link.last_checked_at or "-" }}
+            </p>
+
+            {% if billingo_invoice_link.status == "DRAFT_MISSING" %}
+            <p>
+                A korábbi Billingo draft már nem található Billingóban, ezért új draft generálható.
+            </p>
+            {% endif %}
+        </section>
+        {% endif %}
         <section class="panel details-grid">
             <div>
                 <h2>Normalizált adatok</h2>

@@ -167,9 +167,27 @@ def init_database() -> None:
         )
         """)
 
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS billingo_invoice_links (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                transaction_id INTEGER NOT NULL,
+                billingo_document_id INTEGER NOT NULL,
+                billingo_document_number TEXT,
+                status TEXT NOT NULL,
+                api_log_id INTEGER,
+                last_checked_at TEXT,
+                missing_detected_at TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(transaction_id) REFERENCES finance_transactions(id),
+                FOREIGN KEY(api_log_id) REFERENCES api_call_logs(id)
+            )
+        """)
+
         _seed_lookup_values(cur)
 
         conn.commit()
+
 
 
 def _seed_lookup_values(cur) -> None:

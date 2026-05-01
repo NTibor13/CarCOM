@@ -51,3 +51,35 @@ def create_draft_document(payload: dict) -> dict:
         )
 
     return response_data
+
+def get_document(document_id: int) -> dict:
+    api_key = os.getenv("BILLINGO_API_KEY")
+    base_url = os.getenv("BILLINGO_API_BASE_URL", "https://api.billingo.hu/v3")
+
+    if not api_key:
+        raise BillingoApiError("Missing BILLINGO_API_KEY environment variable")
+
+    url = f"{base_url}/documents/{document_id}"
+
+    response = requests.get(
+        url,
+        headers={
+            "X-API-KEY": api_key,
+            "Accept": "application/json",
+        },
+        timeout=30,
+    )
+
+    try:
+        response_data = response.json()
+    except ValueError:
+        response_data = {"raw_response": response.text}
+
+    if response.status_code != 200:
+        raise BillingoApiError(
+            f"Billingo API error {response.status_code}: {response_data}",
+            status_code=response.status_code,
+            response_data=response_data,
+        )
+
+    return response_data

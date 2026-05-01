@@ -431,3 +431,32 @@ def _update_local_transaction_status(
             ),
         )
         conn.commit()
+
+def update_sheet_link_step(context: dict) -> dict:
+    transaction_id = int(context["transaction_id"])
+    transaction = _get_transaction(transaction_id)
+
+    invoice_document = _get_existing_invoice_document(transaction_id)
+    if not invoice_document:
+        raise RuntimeError(
+            f"No uploaded invoice document found for transaction: {transaction_id}"
+        )
+
+    drive_file_id = invoice_document["raw_value"]
+    row_number = int(transaction["source_row_number"])
+
+    GoogleSheetsClient().update_drive_file_chip(
+        row_number=row_number,
+        header_name="Számla link",
+        file_id=drive_file_id,
+        display_text="Számla",
+    )
+
+    return {
+        "status": "updated",
+        "row_number": row_number,
+        "document_id": invoice_document["id"],
+        "drive_file_id": drive_file_id,
+        "drive_link": invoice_document["file_url"],
+        "header_name": "Számla link",
+    }

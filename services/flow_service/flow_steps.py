@@ -3,6 +3,7 @@ from services.flow_service.steps_billingo import (
     download_document_step,
     upload_to_drive_step,
     update_sheet_status_step,
+    update_sheet_link_step,
 )
 
 SALE_FLOW_STEPS = [
@@ -43,5 +44,5 @@ STEP_HANDLERS = {
     "DOWNLOAD_DOCUMENT": download_document_step,
     "UPLOAD_TO_DRIVE": upload_to_drive_step,
     "UPDATE_SHEET_STATUS": update_sheet_status_step,
-    "UPDATE_SHEET_LINK": placeholder_step_handler,
+    "UPDATE_SHEET_LINK": update_sheet_link_step,
 }

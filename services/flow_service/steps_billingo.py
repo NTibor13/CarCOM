@@ -20,6 +20,7 @@ from pathlib import Path
 from shared.config.settings import settings
 from services.sync_service.google_drive_client import GoogleDriveClient
 from services.billingo_service.invoice_completion_service import _build_invoice_file_name
+from services.sync_service.google_sheets_client import GoogleSheetsClient
 
 
 def create_billingo_draft_step(context: dict) -> dict:
@@ -366,3 +367,67 @@ def _create_invoice_document(
         conn.commit()
 
     return document_id
+
+def update_sheet_status_step(context: dict) -> dict:
+    transaction_id = int(context["transaction_id"])
+    transaction = _get_transaction(transaction_id)
+
+    target_invoice_status = "Számlázott"
+    target_payment_status = "Kiegyenlítésre vár (eladás)"
+
+    if (
+        transaction.get("invoice_status") == target_invoice_status
+        and transaction.get("payment_status") == target_payment_status
+    ):
+        return {
+            "status": "already_updated",
+            "invoice_status": target_invoice_status,
+            "payment_status": target_payment_status,
+        }
+
+    row_number = int(transaction["source_row_number"])
+
+    GoogleSheetsClient().update_row_values(
+        row_number=row_number,
+        values_by_header={
+            "Státusz Számla": target_invoice_status,
+            "Státusz fizetés": target_payment_status,
+        },
+    )
+
+    _update_local_transaction_status(
+        transaction_id=transaction_id,
+        invoice_status=target_invoice_status,
+        payment_status=target_payment_status,
+    )
+
+    return {
+        "status": "updated",
+        "row_number": row_number,
+        "invoice_status": target_invoice_status,
+        "payment_status": target_payment_status,
+    }
+
+
+def _update_local_transaction_status(
+    transaction_id: int,
+    invoice_status: str,
+    payment_status: str,
+) -> None:
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE finance_transactions
+            SET invoice_status = ?,
+                payment_status = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (
+                invoice_status,
+                payment_status,
+                transaction_id,
+            ),
+        )
+        conn.commit()

@@ -53,6 +53,28 @@ class FlowExecutor:
 
                 result = handler(context)
 
+                if result.get("status") == "skipped":
+                    self.repository.mark_step_skipped(
+                        flow_run_id=flow_run_id,
+                        step_name=step_name,
+                        output_data=result,
+                    )
+
+                    self.repository.mark_flow_skipped(
+                        flow_run_id=flow_run_id,
+                        reason=result.get("reason"),
+                    )
+
+                    executed_steps.append(step_name)
+
+                    return {
+                        "flow_run_id": flow_run_id,
+                        "status": "SKIPPED",
+                        "reason": result.get("reason"),
+                        "executed_steps": executed_steps,
+                        "skipped_steps": skipped_steps,
+                    }
+
                 self.repository.mark_step_success(
                     flow_run_id=flow_run_id,
                     step_name=step_name,

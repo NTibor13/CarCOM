@@ -239,3 +239,52 @@ class FlowRepository:
                 ),
             )
             conn.commit()
+
+    def mark_flow_skipped(self, flow_run_id: int, reason: str | None = None) -> None:
+        now = _now()
+
+        with get_connection() as conn:
+            conn.execute(
+                """
+                UPDATE flow_runs
+                SET status = ?,
+                    finished_at = ?,
+                    error_message = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                ("SKIPPED", now, reason, now, flow_run_id),
+            )
+            conn.commit()
+
+    def mark_step_skipped(
+        self,
+        flow_run_id: int,
+        step_name: str,
+        output_data: dict[str, Any] | None = None,
+    ) -> None:
+        now = _now()
+        output_json = json.dumps(output_data or {}, ensure_ascii=False)
+
+        with get_connection() as conn:
+            conn.execute(
+                """
+                UPDATE flow_step_logs
+                SET status = ?,
+                    finished_at = ?,
+                    output_json = ?,
+                    error_message = NULL,
+                    updated_at = ?
+                WHERE flow_run_id = ?
+                  AND step_name = ?
+                """,
+                (
+                    "SKIPPED",
+                    now,
+                    output_json,
+                    now,
+                    flow_run_id,
+                    step_name,
+                ),
+            )
+            conn.commit()

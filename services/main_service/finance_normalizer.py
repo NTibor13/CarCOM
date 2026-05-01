@@ -72,9 +72,9 @@ class FinanceNormalizer:
             cur = conn.cursor()
             # A verzió: a normalizált köztes réteget minden futáskor újraépítjük.
             # Így a törölt/inaktív Google Sheet sorok nem maradnak bent szellemsorként.
-            cur.execute("DELETE FROM finance_validation_errors")
-            cur.execute("DELETE FROM finance_transaction_documents")
-            cur.execute("DELETE FROM finance_transactions")
+            # A normalizált tranzakciókat nem töröljük teljes újraépítéssel,
+            # mert a finance_transactions.id belső azonosítóként stabil kell maradjon.
+            # Az aktív sorokat _upsert_transaction() frissíti sheet_row_id alapján.
             cur.execute(
                 """
                 SELECT id, source_row_number, raw_json

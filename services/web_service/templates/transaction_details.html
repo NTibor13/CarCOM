@@ -186,7 +186,53 @@
                 {% endif %}
             </div>
         </section>
+        <div id="flow-container">
+            <h3>Flow</h3>
 
+            <div id="flow-status">Loading...</div>
+
+            <ul id="flow-steps"></ul>
+        </div>
+
+        <script>
+            async function loadFlow(transactionId) {
+                const res = await fetch(`/api/flow/${transactionId}`);
+                const data = await res.json();
+
+                const statusDiv = document.getElementById("flow-status");
+                const stepsUl = document.getElementById("flow-steps");
+
+                if (!data.flow_run) {
+                    statusDiv.innerText = "No flow yet";
+                    return;
+                }
+
+                statusDiv.innerText = `Status: ${data.flow_run.status}`;
+
+                stepsUl.innerHTML = "";
+
+                data.steps.forEach(step => {
+                    const li = document.createElement("li");
+
+                    let icon = "⏳";
+                    if (step.status === "SUCCESS") icon = "✔";
+                    if (step.status === "FAILED") icon = "❌";
+                    if (step.status === "SKIPPED") icon = "⏭";
+
+                    li.innerText = `${icon} ${step.step_name} (${step.status})`;
+
+                    stepsUl.appendChild(li);
+                });
+            }
+
+            // fontos: itt legyen meg a transaction ID a template-ben
+            loadFlow({
+            {
+                transaction.id
+            }
+            })
+            ;
+        </script>
         <section class="panel">
             <h2>Dokumentumok</h2>
 

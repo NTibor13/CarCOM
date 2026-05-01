@@ -7,8 +7,7 @@ from shared.database.schema import init_database
 from shared.database.connection import get_connection
 from services.main_service.app import run_pipeline_once
 from services.flow_service.flow_engine import evaluate_transaction
-from services.billingo_service.billingo_client import BillingoApiError
-from services.billingo_service.document_service import ensure_billingo_draft_for_transaction
+from services.flow_service.flow_executor import FlowExecutor
 from services.billingo_service.invoice_link_repository import get_latest_invoice_link
 
 app = FastAPI(title="CarCOM Dashboard")
@@ -423,42 +422,14 @@ def approve_billingo_draft(transaction_id: int):
             )
 
         try:
-            result = ensure_billingo_draft_for_transaction(transaction)
+            result = FlowExecutor().run_sale_flow(transaction["id"])
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
 
-        except BillingoApiError as exc:
-            print("[BILLINGO ERROR]", str(exc))
-
-            return RedirectResponse(
-                url=f"/transactions/{transaction_id}?approval_status=billingo_error",
-                status_code=303,
-            )
-
-        if result["status"] == "already_exists":
-            return RedirectResponse(
-                url=f"/transactions/{transaction_id}?approval_status=billingo_already_exists",
-                status_code=303,
-            )
-
-        if result["status"] == "created":
-            return RedirectResponse(
-                url=f"/transactions/{transaction_id}?approval_status=approved",
-                status_code=303,
-            )
-
-        if result["status"] == "created":
-            print(
-                "[FLOW APPROVAL] Billingo draft created + completed",
-                {
-                    "transaction_id": transaction_id,
-                    "source_row_number": transaction.get("source_row_number"),
-                    "car_name": transaction.get("car_name"),
-                    "partner_name": transaction.get("partner_name"),
-                    "amount": transaction.get("net_amount_huf"),
-                },
-            )
+        status = result["status"]
 
         return RedirectResponse(
-            url=f"/transactions/{transaction_id}?approval_status=billingo_error",
+            url=f"/transactions/{transaction['id']}?flow_status={status}",
             status_code=303,
         )
 
@@ -597,3 +568,41 @@ def api_log_detail(request: Request, log_id: int):
             "log": log,
         },
     )
+
+@app.get("/api/flow/{transaction_id}")
+def get_flow(transaction_id: int):
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            SELECT *
+            FROM flow_runs
+            WHERE transaction_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (transaction_id,),
+        )
+        flow_run = cur.fetchone()
+
+        if not flow_run:
+            return {"flow_run": None, "steps": []}
+
+        flow_run = dict(flow_run)
+
+        cur.execute(
+            """
+            SELECT *
+            FROM flow_step_logs
+            WHERE flow_run_id = ?
+            ORDER BY step_order
+            """,
+            (flow_run["id"],),
+        )
+        steps = [dict(row) for row in cur.fetchall()]
+
+    return {
+        "flow_run": flow_run,
+        "steps": steps,
+    }

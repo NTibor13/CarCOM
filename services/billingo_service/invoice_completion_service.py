@@ -67,7 +67,7 @@ def _build_invoice_file_name(
     partner_name = transaction.get("partner_name") or "partner"
     document_number = billingo_document_number or str(billingo_document_id)
 
-    safe_name = f"szamla_{source_row_number}_{document_number}_{car_name}_{partner_name}"
+    safe_name = f"{source_row_number}_{document_number}_{car_name}"
     safe_name = (
         safe_name
         .replace("/", "-")
@@ -79,6 +79,8 @@ def _build_invoice_file_name(
         .replace("<", "")
         .replace(">", "")
         .replace("|", "")
+        .strip()
+        .rstrip(". ")
     )
 
     return f"{safe_name}.pdf"

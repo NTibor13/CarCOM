@@ -30,7 +30,40 @@
                 <strong>{{ database_type }}</strong>
             </div>
         </div>
+        <div class="panel">
+            <h2>Google autentikáció</h2>
 
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Mód</th>
+                        <th>Token állapot</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr>
+                        <td>{{ google_auth.mode }}</td>
+                        <td>
+                            {% if google_auth.status == "ÉRVÉNYES" %}
+                            <span class="status status-valid">{{ google_auth.status }}</span>
+                            {% elif google_auth.status == "LEJÁRT" %}
+                            <span class="status status-warning">{{ google_auth.status }}</span>
+                            {% else %}
+                            <span class="status status-invalid">{{ google_auth.status }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            {% if google_auth.status != "ÉRVÉNYES" %}
+            <div class="empty-state" style="margin-top: 12px;">
+                Google újra autentikálás szükséges (token törlés + új login).
+            </div>
+            {% endif %}
+        </div>
         <div class="panel">
             <h2>Integrációk</h2>
 
@@ -44,16 +77,16 @@
                     </thead>
                     <tbody>
                     {% for integration in integrations %}
-                        <tr>
-                            <td>{{ integration.name }}</td>
-                            <td>
-                                {% if integration.configured %}
-                                    <span class="status status-valid">Konfigurálva</span>
-                                {% else %}
-                                    <span class="status status-invalid">Hiányzik</span>
-                                {% endif %}
-                            </td>
-                        </tr>
+                    <tr>
+                        <td>{{ integration.name }}</td>
+                        <td>
+                            {% if integration.configured %}
+                            <span class="status status-valid">Konfigurálva</span>
+                            {% else %}
+                            <span class="status status-invalid">Hiányzik</span>
+                            {% endif %}
+                        </td>
+                    </tr>
                     {% endfor %}
                     </tbody>
                 </table>
@@ -64,40 +97,40 @@
             <h2>Üzleti törzsértékek</h2>
 
             {% for group_name, rows in grouped_lookup_values.items() %}
-                <h3>{{ group_name }}</h3>
+            <h3>{{ group_name }}</h3>
 
-                <div class="table-wrap">
-                    <table>
-                        <thead>
-                        <tr>
-                            <th>Forrás érték</th>
-                            <th>Normalizált érték</th>
-                            <th>Aktív</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        {% for row in rows %}
-                            <tr>
-                                <td>{{ row.value }}</td>
-                                <td>{{ row.normalized_value or "-" }}</td>
-                                <td>
-                                    {% if row.is_active %}
-                                        <span class="status status-valid">Igen</span>
-                                    {% else %}
-                                        <span class="status status-invalid">Nem</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                        {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Forrás érték</th>
+                        <th>Normalizált érték</th>
+                        <th>Aktív</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for row in rows %}
+                    <tr>
+                        <td>{{ row.value }}</td>
+                        <td>{{ row.normalized_value or "-" }}</td>
+                        <td>
+                            {% if row.is_active %}
+                            <span class="status status-valid">Igen</span>
+                            {% else %}
+                            <span class="status status-invalid">Nem</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
             {% endfor %}
 
             {% if grouped_lookup_values|length == 0 %}
-                <div class="empty-state">
-                    Nincsenek üzleti törzsértékek.
-                </div>
+            <div class="empty-state">
+                Nincsenek üzleti törzsértékek.
+            </div>
             {% endif %}
         </div>
     </main>

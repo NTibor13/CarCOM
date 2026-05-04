@@ -1,3 +1,4 @@
+import  json
 from shared.database.connection import get_connection
 from services.billingo_service.api_call_logger import log_api_call
 from services.billingo_service.billingo_client import (
@@ -434,29 +435,60 @@ def _update_local_transaction_status(
 
 def update_sheet_link_step(context: dict) -> dict:
     transaction_id = int(context["transaction_id"])
+    flow_run_id = int(context["flow_run_id"])
     transaction = _get_transaction(transaction_id)
 
-    invoice_document = _get_existing_invoice_document(transaction_id)
-    if not invoice_document:
-        raise RuntimeError(
-            f"No uploaded invoice document found for transaction: {transaction_id}"
+    uploaded_invoice = _get_upload_to_drive_output(flow_run_id)
+
+    if not uploaded_invoice:
+        raise Exception(
+            f"No uploaded invoice document found in UPLOAD_TO_DRIVE output for transaction: {transaction_id}"
         )
 
-    drive_file_id = invoice_document["raw_value"]
+    drive_link = uploaded_invoice.get("drive_link")
+    drive_file_id = uploaded_invoice.get("drive_file_id")
+
+    if not drive_link:
+        raise Exception(
+            f"UPLOAD_TO_DRIVE output does not contain drive_link for transaction: {transaction_id}"
+        )
+
     row_number = int(transaction["source_row_number"])
 
     GoogleSheetsClient().update_drive_file_chip(
         row_number=row_number,
         header_name="Számla link",
         file_id=drive_file_id,
-        display_text="Számla",
     )
 
     return {
         "status": "updated",
         "row_number": row_number,
-        "document_id": invoice_document["id"],
+        "document_id": uploaded_invoice.get("document_id"),
         "drive_file_id": drive_file_id,
-        "drive_link": invoice_document["file_url"],
+        "drive_link": drive_link,
         "header_name": "Számla link",
     }
+
+def _get_upload_to_drive_output(flow_run_id: int) -> dict | None:
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT output_json
+            FROM flow_step_logs
+            WHERE flow_run_id = ?
+              AND step_name = 'UPLOAD_TO_DRIVE'
+              AND status = 'SUCCESS'
+              AND output_json IS NOT NULL
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (flow_run_id,),
+        )
+        row = cur.fetchone()
+
+    if not row or not row["output_json"]:
+        return None
+
+    return json.loads(row["output_json"])

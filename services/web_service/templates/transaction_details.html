@@ -67,11 +67,39 @@
                 <span class="flow-badge">Kiszámlázható</span>
 
                 {% if transaction.flow_action == "BILLINGO_DRAFT_REQUIRED" %}
-                <form method="post" action="/transactions/{{ transaction.id }}/approve-billingo">
-                    <button type="submit" class="flow-primary-button">
-                        Számladraft jóváhagyása
+                <div class="action-panel">
+                    {% if not latest_flow_run %}
+                    <form method="post" action="/transactions/{{ transaction.id }}/approve-billingo">
+                        <button type="submit" class="primary-button">
+                            Folyamat indítása
+                        </button>
+                    </form>
+
+                    {% elif latest_flow_run.status == "FAILED" %}
+                    <form method="post" action="/transactions/{{ transaction.id }}/approve-billingo">
+                        <button type="submit" class="primary-button">
+                            Folyamat folytatása
+                        </button>
+                    </form>
+
+                    {% elif latest_flow_run.status == "SUCCESS" %}
+                    <button type="button" class="secondary-button" disabled>
+                        Folyamat kész
                     </button>
-                </form>
+
+                    {% elif latest_flow_run.status == "SKIPPED" %}
+                    <button type="button" class="secondary-button" disabled>
+                        Folyamat kihagyva
+                    </button>
+
+                    {% else %}
+                    <form method="post" action="/transactions/{{ transaction.id }}/approve-billingo">
+                        <button type="submit" class="primary-button">
+                            Folyamat futtatása
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
                 {% endif %}
             </div>
             {% if approval_status == "approved" %}

@@ -19,43 +19,43 @@ class GoogleDriveClient:
         self.credentials = self._load_oauth_credentials()
         self.service = build("drive", "v3", credentials=self.credentials)
 
-    def _load_oauth_credentials(self) -> Credentials:
-        credentials = None
+    def load_oauth_credentials(scopes):
+        token_file = os.getenv("GOOGLE_OAUTH_TOKEN_FILE", "google_oauth_token.json")
 
-        token_file = settings.google_oauth_token_file
-        client_file = settings.google_oauth_client_file
-
-        if os.path.exists(token_file):
-            credentials = Credentials.from_authorized_user_file(
-                token_file,
-                SCOPES,
+        if not os.path.exists(token_file):
+            raise GoogleAuthenticationRequiredError(
+                "Google OAuth token hiányzik. Újraautentikálás szükséges."
             )
 
-        if credentials and credentials.valid:
-            return credentials
+        try:
+            creds = Credentials.from_authorized_user_file(token_file, scopes)
+        except Exception as exc:
+            raise GoogleAuthenticationRequiredError(
+                "Google OAuth token nem olvasható vagy sérült. Újraautentikálás szükséges."
+            ) from exc
 
-        if credentials and credentials.expired and credentials.refresh_token:
-            credentials.refresh(Request())
-            self._save_credentials(credentials)
-            return credentials
+        if creds.valid:
+            return creds
 
-        if not os.path.exists(client_file):
-            raise FileNotFoundError(
-                f"Google OAuth client file not found: {client_file}"
-            )
+        if creds.expired and creds.refresh_token:
+            try:
+                creds.refresh(Request())
 
-        flow = InstalledAppFlow.from_client_secrets_file(
-            client_file,
-            SCOPES,
+                with open(token_file, "w", encoding="utf-8") as token:
+                    token.write(creds.to_json())
+
+                return creds
+
+            except Exception as exc:
+                raise GoogleAuthenticationRequiredError(
+                    "Google OAuth token lejárt, és nem sikerült automatikusan frissíteni. "
+                    "Újraautentikálás szükséges."
+                ) from exc
+
+        raise GoogleAuthenticationRequiredError(
+            "Google OAuth token érvénytelen vagy nincs refresh_token. "
+            "Újraautentikálás szükséges."
         )
-
-        credentials = flow.run_local_server(
-            port=0,
-            prompt="consent",
-        )
-
-        self._save_credentials(credentials)
-        return credentials
 
     def _save_credentials(self, credentials: Credentials) -> None:
         token_file = settings.google_oauth_token_file

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <title>CarCOM - Google autentikáció szükséges</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="app-shell">
+    <aside class="sidebar">
+        {% include "partials/nav.html" %}
+    </aside>
+
+    <main class="main">
+        <div class="topbar">
+            <div>
+                <h1>Google autentikáció szükséges</h1>
+                <p>A szinkron nem futtatható, mert a Google OAuth hozzáférés nem érvényes.</p>
+            </div>
+        </div>
+
+        <div class="panel">
+            <p>{{ message }}</p>
+
+            <p>
+                Töröld vagy frissítsd a
+                <strong>google_oauth_token.json</strong>
+                fájlt, majd indítsd újra a Google bejelentkezést.
+            </p>
+
+            <a href="/settings" class="secondary-button">Beállítások megnyitása</a>
+        </div>
+    </main>
+</div>
+</body>
+</html>

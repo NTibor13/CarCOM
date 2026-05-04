@@ -1,4 +1,6 @@
 import os
+import json
+from fastapi import HTTPException
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -6,6 +8,7 @@ from fastapi.templating import Jinja2Templates
 
 from shared.database.schema import init_database
 from shared.database.connection import get_connection
+from shared.google_auth_errors import GoogleAuthenticationRequiredError
 from services.main_service.app import run_pipeline_once
 from services.flow_service.flow_engine import evaluate_transaction
 from services.flow_service.flow_executor import FlowExecutor
@@ -15,6 +18,8 @@ from services.web_service.template_filters import (
     format_vat,
     format_transaction_type,
 )
+
+from google.oauth2.credentials import Credentials
 
 app = FastAPI(title="CarCOM Dashboard")
 
@@ -324,13 +329,21 @@ def validation_errors(
 
 
 @app.post("/sync")
-def run_manual_sync():
-    run_pipeline_once()
-    return RedirectResponse(url="/?sync_status=success", status_code=303)
+def run_manual_sync(request: Request):
+    try:
+        run_pipeline_once()
+    except GoogleAuthenticationRequiredError as exc:
+        return templates.TemplateResponse(
+            "sync_error.html",
+            {
+                "request": request,
+                "active_page": "sync_runs",
+                "message": str(exc),
+            },
+            status_code=401,
+        )
 
-
-import json
-from fastapi import HTTPException
+    return RedirectResponse(url="/", status_code=303)
 
 
 @app.get("/transactions/{transaction_id}", response_class=HTMLResponse)
@@ -390,6 +403,19 @@ def transaction_details(request: Request, transaction_id: int, approval_status: 
 
         billingo_invoice_link = get_latest_invoice_link(transaction_id)
 
+        cur.execute(
+            """
+            SELECT *
+            FROM flow_runs
+            WHERE transaction_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (transaction_id,),
+        )
+        latest_flow_run = cur.fetchone()
+        latest_flow_run = dict(latest_flow_run) if latest_flow_run else None
+
     return templates.TemplateResponse(
         "transaction_details.html",
         {
@@ -400,6 +426,7 @@ def transaction_details(request: Request, transaction_id: int, approval_status: 
             "raw_json_pretty": raw_json_pretty,
             "approval_status": approval_status,
             "billingo_invoice_link": billingo_invoice_link,
+            "latest_flow_run": latest_flow_run,
             "active_page": "dashboard",
         },
     )
@@ -694,7 +721,6 @@ def sync_runs(
             "total_count": total_count,
             "total_pages": total_pages,
             "status": status,
-            "active_page": "sync_runs",
         },
     )
 
@@ -742,6 +768,7 @@ def settings(request: Request):
     grouped_lookup_values = {}
     for row in lookup_rows:
         grouped_lookup_values.setdefault(row["group_name"], []).append(row)
+    google_auth = get_google_oauth_status()
 
     return templates.TemplateResponse(
         "settings.html",
@@ -752,5 +779,41 @@ def settings(request: Request):
             "database_type": "SQLite",
             "integrations": integrations,
             "grouped_lookup_values": grouped_lookup_values,
+            "google_auth": google_auth,
         },
     )
+
+def get_google_oauth_status():
+    token_file = os.getenv("GOOGLE_OAUTH_TOKEN_FILE", "google_oauth_token.json")
+
+    if not os.path.exists(token_file):
+        return {
+            "mode": "OAuth",
+            "status": "HIÁNYZIK",
+        }
+
+    try:
+        creds = Credentials.from_authorized_user_file(token_file)
+
+        if creds.valid:
+            return {
+                "mode": "OAuth",
+                "status": "ÉRVÉNYES",
+            }
+
+        if creds.expired:
+            return {
+                "mode": "OAuth",
+                "status": "LEJÁRT",
+            }
+
+        return {
+            "mode": "OAuth",
+            "status": "HIBÁS",
+        }
+
+    except Exception:
+        return {
+            "mode": "OAuth",
+            "status": "HIBÁS",
+        }

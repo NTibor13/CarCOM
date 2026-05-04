@@ -2,6 +2,7 @@ import os
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
+from shared.google_auth_errors import GoogleAuthenticationRequiredError
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
@@ -241,7 +242,6 @@ class GoogleSheetsClient:
             row_number: int,
             header_name: str,
             file_id: str,
-            display_text: str = "Számla",
     ) -> None:
         sheet_id = self._get_sheet_id()
         column_index = self._get_column_index_by_header(header_name)
@@ -331,41 +331,62 @@ class GoogleSheetsClient:
 
     def _load_oauth_credentials(self) -> Credentials:
         credentials = None
-
         token_file = settings.google_oauth_token_file
         client_file = settings.google_oauth_client_file
 
         if os.path.exists(token_file):
-            credentials = Credentials.from_authorized_user_file(
-                token_file,
-                SCOPES,
-            )
+            try:
+                credentials = Credentials.from_authorized_user_file(
+                    token_file,
+                    SCOPES,
+                )
+            except Exception as exc:
+                raise GoogleAuthenticationRequiredError(
+                    "Google OAuth token nem olvasható vagy sérült. "
+                    "Újraautentikálás szükséges."
+                ) from exc
 
         if credentials and credentials.valid:
             return credentials
 
         if credentials and credentials.expired and credentials.refresh_token:
-            credentials.refresh(Request())
-            self._save_credentials(credentials)
-            return credentials
+            try:
+                credentials.refresh(Request())
+                self._save_credentials(credentials)
+                return credentials
+            except Exception as exc:
+                raise GoogleAuthenticationRequiredError(
+                    "Google OAuth token lejárt, és nem sikerült automatikusan frissíteni. "
+                    "Újraautentikálás szükséges."
+                ) from exc
 
-        if not os.path.exists(client_file):
-            raise FileNotFoundError(
-                f"Google OAuth client file not found: {client_file}"
+        if credentials:
+            raise GoogleAuthenticationRequiredError(
+                "Google OAuth token érvénytelen vagy nincs refresh_token. "
+                "Újraautentikálás szükséges."
             )
 
-        flow = InstalledAppFlow.from_client_secrets_file(
-            client_file,
-            SCOPES,
-        )
+        if not os.path.exists(client_file):
+            raise GoogleAuthenticationRequiredError(
+                f"Google OAuth client file nem található: {client_file}"
+            )
 
-        credentials = flow.run_local_server(
-            port=0,
-            prompt="consent",
-        )
-
-        self._save_credentials(credentials)
-        return credentials
+        try:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                client_file,
+                SCOPES,
+            )
+            credentials = flow.run_local_server(
+                port=0,
+                prompt="consent",
+            )
+            self._save_credentials(credentials)
+            return credentials
+        except Exception as exc:
+            raise GoogleAuthenticationRequiredError(
+                "Google OAuth bejelentkezés nem sikerült. "
+                "Újraautentikálás szükséges."
+            ) from exc
 
     def _save_credentials(self, credentials: Credentials) -> None:
         token_file = settings.google_oauth_token_file

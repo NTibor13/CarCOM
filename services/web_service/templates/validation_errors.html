@@ -8,13 +8,8 @@
 <body>
 <div class="app-shell">
     <aside class="sidebar">
-        <div class="brand">CarCOM</div>
         <nav>
-            <a href="/">Köztes adatréteg</a>
-            <a href="#">Szinkron futások</a>
-            <a class="active" href="/validation-errors">Validációs hibák</a>
-            <a href="/api-logs">API hívások</a>
-            <a href="#">Beállítások</a>
+            {% include "partials/nav.html" %}
         </nav>
     </aside>
 
@@ -47,22 +42,24 @@
         <section class="panel">
             <form class="filters" method="get">
                 <input
-                    type="text"
-                    name="search"
-                    placeholder="Keresés: sor, ID, autó, ügyfél, mező, hibaüzenet..."
-                    value="{{ search }}"
+                        type="text"
+                        name="search"
+                        placeholder="Keresés: sor, ID, autó, ügyfél, mező, hibaüzenet..."
+                        value="{{ search }}"
                 >
 
                 <select name="severity">
                     <option value="">Minden súlyosság</option>
-                    <option value="ERROR" {% if severity == "ERROR" %}selected{% endif %}>ERROR</option>
-                    <option value="WARNING" {% if severity == "WARNING" %}selected{% endif %}>WARNING</option>
+                    <option value="ERROR" {% if severity==
+                    "ERROR" %}selected{% endif %}>ERROR</option>
+                    <option value="WARNING" {% if severity==
+                    "WARNING" %}selected{% endif %}>WARNING</option>
                 </select>
 
                 <select name="error_code">
                     <option value="">Minden hibakód</option>
                     {% for item in error_code_summary %}
-                    <option value="{{ item.error_code }}" {% if error_code == item.error_code %}selected{% endif %}>
+                    <option value="{{ item.error_code }}" {% if error_code== item.error_code %}selected{% endif %}>
                         {{ item.error_code }} ({{ item.count }})
                     </option>
                     {% endfor %}

@@ -1,0 +1,23 @@
+<div class="brand">CarCOM</div>
+
+<nav>
+    <a href="/" class="{% if active_page == 'dashboard' %}active{% endif %}">
+        Köztes adatréteg
+    </a>
+
+    <a href="/sync-runs" class="{% if active_page == 'sync_runs' %}active{% endif %}">
+        Szinkron futások
+    </a>
+
+    <a href="/validation-errors" class="{% if active_page == 'validation_errors' %}active{% endif %}">
+        Validációs hibák
+    </a>
+
+    <a href="/api-logs" class="{% if active_page == 'api_logs' %}active{% endif %}">
+        API hívások
+    </a>
+
+    <a href="/settings" class="{% if active_page == 'settings' %}active{% endif %}">
+        Beállítások
+    </a>
+</nav>

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <title>CarCOM - Szinkron futások</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="app-shell">
+    <aside class="sidebar">
+        {% include "partials/nav.html" %}
+    </aside>
+
+    <main class="main">
+        <div class="topbar">
+            <div>
+                <h1>Szinkron futások</h1>
+                <p>Google Sheet szinkronizációs futások naplója.</p>
+            </div>
+        </div>
+
+        <div class="cards">
+            <div class="card">
+                <span>Összes futás</span>
+                <strong>{{ total_count }}</strong>
+            </div>
+        </div>
+
+        <div class="panel">
+            <form method="get" action="/sync-runs" class="filters">
+                <select name="status">
+                    <option value="">Minden státusz</option>
+                    <option value="SUCCESS" {% if status == "SUCCESS" %}selected{% endif %}>SUCCESS</option>
+                    <option value="FAILED" {% if status == "FAILED" %}selected{% endif %}>FAILED</option>
+                    <option value="RUNNING" {% if status == "RUNNING" %}selected{% endif %}>RUNNING</option>
+                </select>
+
+                <button type="submit">Szűrés</button>
+            </form>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Indult</th>
+                        <th>Befejeződött</th>
+                        <th>Státusz</th>
+                        <th>Service</th>
+                        <th>Forrás</th>
+                        <th class="number">Olvasott</th>
+                        <th class="number">Új</th>
+                        <th class="number">Frissített</th>
+                        <th class="number">Törölt</th>
+                        <th>Hiba</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for row in rows %}
+                        <tr class="{% if row.status == 'FAILED' %}row-status-invalid{% endif %}">
+                            <td>#{{ row.id }}</td>
+                            <td>{{ row.started_at or "-" }}</td>
+                            <td>{{ row.finished_at or "-" }}</td>
+                            <td>
+                                {% if row.status == "SUCCESS" %}
+                                    <span class="status status-valid">SUCCESS</span>
+                                {% elif row.status == "FAILED" %}
+                                    <span class="status status-invalid">FAILED</span>
+                                {% else %}
+                                    <span class="status status-warning">{{ row.status or "-" }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ row.service_name or "-" }}</td>
+                            <td>
+                                {{ row.source_name or "-" }}
+                                {% if row.source_identifier %}
+                                    <br>
+                                    <small>{{ row.source_identifier }}</small>
+                                {% endif %}
+                            </td>
+                            <td class="number">{{ row.rows_read or 0 }}</td>
+                            <td class="number">{{ row.inserted_count or 0 }}</td>
+                            <td class="number">{{ row.updated_count or 0 }}</td>
+                            <td class="number">{{ row.deleted_count or 0 }}</td>
+                            <td>{{ row.error_message or "-" }}</td>
+                        </tr>
+                    {% endfor %}
+
+                    {% if rows|length == 0 %}
+                        <tr>
+                            <td colspan="11" class="empty-state">
+                                Nincs szinkron futás az aktuális szűrés alapján.
+                            </td>
+                        </tr>
+                    {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination">
+                {% if page > 1 %}
+                    <a href="/sync-runs?page={{ page - 1 }}&status={{ status }}">Előző</a>
+                {% endif %}
+
+                <span>{{ page }} / {{ total_pages }}</span>
+
+                {% if page < total_pages %}
+                    <a href="/sync-runs?page={{ page + 1 }}&status={{ status }}">Következő</a>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+</div>
+</body>
+</html>

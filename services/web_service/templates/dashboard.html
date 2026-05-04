@@ -8,14 +8,7 @@
 <body>
 <div class="app-shell">
     <aside class="sidebar">
-        <div class="brand">CarCOM</div>
-        <nav>
-            <a class="active" href="/">Köztes adatréteg</a>
-            <a href="#">Szinkron futások</a>
-            <a href="/validation-errors">Validációs hibák</a>
-            <a href="/api-logs">API hívások</a>
-            <a href="#">Beállítások</a>
-        </nav>
+        {% include "partials/nav.html" %}
     </aside>
 
     <main class="main">
@@ -161,16 +154,16 @@
                         <td>{{ row.source_row_number }}</td>
                         <td>{{ row.external_id or "" }}</td>
                         <td>{{ row.transaction_date or "" }}</td>
-                        <td><span class="badge">{{ row.transaction_type }}</span></td>
+                        <td><span class="badge">{{ row.transaction_type | format_transaction_type }}</span></td>
                         <td>
                             <a class="table-link" href="/transactions/{{ row.id }}">
                                 {{ row.car_name or "Részletek" }}
                             </a>
                         </td>
                         <td>{{ row.partner_name or "" }}</td>
-                        <td class="number">{{ "{:,}".format(row.gross_amount_huf or 0).replace(",", " ") }} Ft</td>
-                        <td>{{ row.vat_rate or "" }}</td>
-                        <td class="number">{{ row.net_amount_huf or "" }}</td>
+                        <td class="number">{{ row.gross_amount_huf | format_huf }}</td>
+                        <td>{{ row.vat_rate | format_vat }}</td>
+                        <td class="number">{{ row.net_amount_huf | format_huf }}</td>
                         <td>{{ row.invoice_status or "" }}</td>
                         <td>{{ row.payment_status or "" }}</td>
                         <td><span

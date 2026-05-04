@@ -8,14 +8,7 @@
 <body>
 <div class="app-shell">
     <aside class="sidebar">
-        <div class="brand">CarCOM</div>
-        <nav>
-            <a href="/">Köztes adatréteg</a>
-            <a href="#">Szinkron futások</a>
-            <a href="/validation-errors">Validációs hibák</a>
-            <a href="/api-logs">API hívások</a>
-            <a href="#">Beállítások</a>
-        </nav>
+        {% include "partials/nav.html" %}
     </aside>
 
     <main class="main">
@@ -28,16 +21,8 @@
                 <p class="transaction-meta">
                     <span>Google sor: {{ transaction.source_row_number }}</span>
                     <span>· Külső ID: {{ transaction.external_id or "-" }}</span>
-                    <span class="type-badge type-{{ transaction.transaction_type|lower|replace('_', '-') }}">
-                        {% if transaction.transaction_type == "SALE" %}
-                            ELADÁS
-                        {% elif transaction.transaction_type == "PURCHASE" %}
-                            VÉTEL
-                        {% elif transaction.transaction_type == "SALE_STOCK_90_DAYS" %}
-                            VÉTEL (90 NAP)
-                        {% else %}
-                            {{ transaction.transaction_type }}
-                        {% endif %}
+                    <span class="type-badge type-{{ transaction.transaction_type | format_transaction_type }}">
+                        {{ transaction.transaction_type | format_transaction_type }}
                     </span>
                 </p>
             </div>
@@ -48,21 +33,15 @@
         <section class="cards">
             <div class="card">
                 <span>Bruttó összeg</span>
-                <strong>{{ "{:,.0f}".format((transaction.gross_amount_huf or 0)|float).replace(",", " ") }} Ft</strong>
+                <strong>{{ transaction.gross_amount_huf | format_huf }}</strong>
             </div>
             <div class="card">
                 <span>ÁFA</span>
-                <strong>
-                    {% if transaction.vat_rate in ["0", "0.0", 0] %}
-                    K.ÁFA
-                    {% else %}
-                    {{ (transaction.vat_rate|float * 100)|round(0)|int }}%
-                    {% endif %}
-                </strong>
+                <strong>{{ transaction.vat_rate | format_vat }}</strong>
             </div>
             <div class="card">
                 <span>Nettó összeg</span>
-                <strong>{{ "{:,.0f}".format((transaction.net_amount_huf or 0)|float).replace(",", " ") }} Ft</strong>
+                <strong>{{ transaction.net_amount_huf | format_huf }}</strong>
             </div>
             <div class="card">
                 <span>Validáció</span>

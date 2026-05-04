@@ -9,12 +9,21 @@ from services.main_service.app import run_pipeline_once
 from services.flow_service.flow_engine import evaluate_transaction
 from services.flow_service.flow_executor import FlowExecutor
 from services.billingo_service.invoice_link_repository import get_latest_invoice_link
+from services.web_service.template_filters import (
+    format_huf,
+    format_vat,
+    format_transaction_type,
+)
 
 app = FastAPI(title="CarCOM Dashboard")
 
 app.mount("/static", StaticFiles(directory="services/web_service/static"), name="static")
 templates = Jinja2Templates(directory="services/web_service/templates")
 
+
+templates.env.filters["format_huf"] = format_huf
+templates.env.filters["format_vat"] = format_vat
+templates.env.filters["format_transaction_type"] = format_transaction_type
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard(
@@ -190,6 +199,7 @@ def dashboard(
             "status_summary": status_summary,
             "latest_sync_run": latest_sync_run,
             "sync_status": sync_status,
+            "active_page": "dashboard",
         },
     )
 
@@ -307,6 +317,7 @@ def validation_errors(
             "error_code": error_code,
             "severity_summary": severity_summary,
             "error_code_summary": error_code_summary,
+            "active_page": "validation_errors",
         },
     )
 
@@ -388,6 +399,7 @@ def transaction_details(request: Request, transaction_id: int, approval_status: 
             "raw_json_pretty": raw_json_pretty,
             "approval_status": approval_status,
             "billingo_invoice_link": billingo_invoice_link,
+            "active_page": "dashboard",
         },
     )
 
@@ -513,6 +525,7 @@ def api_logs(
             "total_pages": total_pages,
             "provider": provider,
             "success": success,
+            "active_page": "api_logs",
         },
     )
 
@@ -566,6 +579,7 @@ def api_log_detail(request: Request, log_id: int):
         {
             "request": request,
             "log": log,
+            "active_page": "api_logs",
         },
     )
 
@@ -605,4 +619,80 @@ def get_flow(transaction_id: int):
     return {
         "flow_run": flow_run,
         "steps": steps,
+        "active_page": "dashboard",
     }
+
+@app.get("/sync-runs", response_class=HTMLResponse)
+def sync_runs(
+    request: Request,
+    page: int = Query(1, ge=1),
+    status: str = "",
+):
+    init_database()
+
+    page_size = 25
+    offset = (page - 1) * page_size
+
+    where_clauses = []
+    params = []
+
+    if status:
+        where_clauses.append("status = ?")
+        params.append(status)
+
+    where_sql = ""
+    if where_clauses:
+        where_sql = "WHERE " + " AND ".join(where_clauses)
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        cur.execute(
+            f"""
+            SELECT COUNT(*) AS count
+            FROM sync_runs
+            {where_sql}
+            """,
+            params,
+        )
+        total_count = int(cur.fetchone()["count"])
+
+        cur.execute(
+            f"""
+            SELECT
+                id,
+                service_name,
+                started_at,
+                finished_at,
+                status,
+                source_name,
+                source_identifier,
+                rows_read,
+                inserted_count,
+                updated_count,
+                deleted_count,
+                error_message
+            FROM sync_runs
+            {where_sql}
+            ORDER BY started_at DESC
+            LIMIT ? OFFSET ?
+            """,
+            [*params, page_size, offset],
+        )
+        rows = [dict(row) for row in cur.fetchall()]
+
+    total_pages = max((total_count + page_size - 1) // page_size, 1)
+
+    return templates.TemplateResponse(
+        "sync_runs.html",
+        {
+            "request": request,
+            "rows": rows,
+            "page": page,
+            "page_size": page_size,
+            "total_count": total_count,
+            "total_pages": total_pages,
+            "status": status,
+            "active_page": "sync_runs",
+        },
+    )

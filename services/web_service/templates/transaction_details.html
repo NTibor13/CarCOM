@@ -83,12 +83,12 @@
                     </form>
 
                     {% elif latest_flow_run.status == "SUCCESS" %}
-                    <button type="button" class="secondary-button" disabled>
+                    <button type="button" class="floating-button" disabled>
                         Folyamat kész
                     </button>
 
                     {% elif latest_flow_run.status == "SKIPPED" %}
-                    <button type="button" class="secondary-button" disabled>
+                    <button type="button" class="floating-button" disabled>
                         Folyamat kihagyva
                     </button>
 
@@ -96,6 +96,14 @@
                     <form method="post" action="/transactions/{{ transaction.id }}/approve-billingo">
                         <button type="submit" class="primary-button">
                             Folyamat futtatása
+                        </button>
+                    </form>
+                    {% endif %}
+
+                    {% if latest_flow_run and transaction.flow_action == "BILLINGO_DRAFT_REQUIRED" %}
+                    <form method="post" action="/transactions/{{ transaction.id }}/rerun-flow">
+                        <button type="submit" class="secondary-button">
+                            Új folyamat indítása
                         </button>
                     </form>
                     {% endif %}

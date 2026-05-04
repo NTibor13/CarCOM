@@ -817,3 +817,41 @@ def get_google_oauth_status():
             "mode": "OAuth",
             "status": "HIBÁS",
         }
+
+@app.post("/transactions/{transaction_id}/rerun-flow")
+def rerun_sale_flow(transaction_id: int):
+    init_database()
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT *
+            FROM finance_transactions
+            WHERE id = ?
+            """,
+            (transaction_id,),
+        )
+        transaction = cur.fetchone()
+
+    if transaction is None:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    transaction = dict(transaction)
+    flow_result = evaluate_transaction(transaction)
+
+    if flow_result["action"] != "BILLINGO_DRAFT_REQUIRED":
+        return RedirectResponse(
+            url=f"/transactions/{transaction_id}?approval_status=not_ready",
+            status_code=303,
+        )
+
+    result = FlowExecutor().run_sale_flow(
+        transaction_id=transaction_id,
+        force_new_run=True,
+    )
+
+    return RedirectResponse(
+        url=f"/transactions/{transaction_id}?flow_status={result['status']}",
+        status_code=303,
+    )

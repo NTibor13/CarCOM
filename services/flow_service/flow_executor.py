@@ -6,11 +6,17 @@ class FlowExecutor:
     def __init__(self, repository: FlowRepository | None = None):
         self.repository = repository or FlowRepository()
 
-    def run_sale_flow(self, transaction_id: int) -> dict:
-        flow_run = self.repository.get_or_create_flow_run(
-            transaction_id=transaction_id,
-            flow_type="SALE",
-        )
+    def run_sale_flow(self, transaction_id: int, force_new_run: bool = False) -> dict:
+        if force_new_run:
+            flow_run = self.repository.create_flow_run(
+                transaction_id=transaction_id,
+                flow_type="SALE",
+            )
+        else:
+            flow_run = self.repository.get_or_create_flow_run(
+                transaction_id=transaction_id,
+                flow_type="SALE",
+            )
 
         flow_run_id = flow_run["id"]
         self.repository.mark_flow_running(flow_run_id)

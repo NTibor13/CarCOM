@@ -710,3 +710,44 @@ tbody tr:hover {
     background: #fef3c7;
     color: #92400e;
 }
+
+.action-panel {
+    margin-top: 16px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.secondary-button {
+    background: #eff6ff;           /* nagyon halvány kék */
+    color: #2563eb;
+    border: 1px solid #bfdbfe;     /* halvány keret */
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.secondary-button:hover {
+    background: #dbeafe;
+}
+
+.floating-button {
+    background: transparent;
+    border: none;
+    color: #374151; /* szürke */
+    padding: 10px 0;
+    font-weight: 500;
+    cursor: default;
+}
+
+.action-panel {
+    margin-top: 16px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}

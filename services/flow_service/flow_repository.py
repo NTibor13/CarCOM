@@ -288,3 +288,41 @@ class FlowRepository:
                 ),
             )
             conn.commit()
+
+    def create_flow_run(self, transaction_id: int, flow_type: str) -> dict:
+        now = _now()
+
+        with get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO flow_runs (
+                    transaction_id,
+                    flow_type,
+                    status,
+                    started_at,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    transaction_id,
+                    flow_type,
+                    "RUNNING",
+                    now,
+                    now,
+                    now,
+                ),
+            )
+            conn.commit()
+
+            cur.execute(
+                """
+                SELECT *
+                FROM flow_runs
+                WHERE id = ?
+                """,
+                (cur.lastrowid,),
+            )
+            return dict(cur.fetchone())

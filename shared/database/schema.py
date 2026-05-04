@@ -195,7 +195,6 @@ def init_database() -> None:
                 error_message TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-                UNIQUE(transaction_id, flow_type),
                 FOREIGN KEY(transaction_id) REFERENCES finance_transactions(id)
             )
         """)

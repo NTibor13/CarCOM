@@ -5,10 +5,10 @@ def build_billingo_payload(tx: dict) -> dict:
     transaction_date = datetime.strptime(tx["transaction_date"], "%Y-%m-%d")
 
     # due date logika
-    if tx["source_cost_center"] == "Eladás":
-        due_date = transaction_date + timedelta(days=8)
-    else:
+    if tx["transaction_type"] == "SALE_STOCK_90_DAYS":
         due_date = transaction_date + timedelta(days=90)
+    else:
+        due_date = transaction_date + timedelta(days=8)
 
     # VAT mapping
     vat_rate = Decimal(str(tx.get("vat_rate") or "0"))

@@ -9,6 +9,8 @@ from fastapi.templating import Jinja2Templates
 from shared.database.schema import init_database
 from shared.database.connection import get_connection
 from shared.google_auth_errors import GoogleAuthenticationRequiredError
+from shared.google_oauth import load_oauth_credentials
+from shared.config.settings import settings as app_settings
 from services.main_service.app import run_pipeline_once
 from services.flow_service.flow_engine import evaluate_transaction
 from services.flow_service.flow_executor import FlowExecutor
@@ -25,7 +27,6 @@ app = FastAPI(title="CarCOM Dashboard")
 
 app.mount("/static", StaticFiles(directory="services/web_service/static"), name="static")
 templates = Jinja2Templates(directory="services/web_service/templates")
-
 
 templates.env.filters["format_huf"] = format_huf
 templates.env.filters["format_vat"] = format_vat
@@ -784,38 +785,29 @@ def settings(request: Request):
     )
 
 def get_google_oauth_status():
-    token_file = os.getenv("GOOGLE_OAUTH_TOKEN_FILE", "google_oauth_token.json")
+    token_file = app_settings.google_oauth_token_file
 
     if not os.path.exists(token_file):
         return {
             "mode": "OAuth",
             "status": "HIÁNYZIK",
+            "has_refresh_token": False,
         }
 
     try:
         creds = Credentials.from_authorized_user_file(token_file)
 
-        if creds.valid:
-            return {
-                "mode": "OAuth",
-                "status": "ÉRVÉNYES",
-            }
-
-        if creds.expired:
-            return {
-                "mode": "OAuth",
-                "status": "LEJÁRT",
-            }
-
         return {
             "mode": "OAuth",
-            "status": "HIBÁS",
+            "status": "ÉRVÉNYES" if creds.valid else "LEJÁRT" if creds.expired else "HIBÁS",
+            "has_refresh_token": bool(creds.refresh_token),
         }
 
     except Exception:
         return {
             "mode": "OAuth",
             "status": "HIBÁS",
+            "has_refresh_token": False,
         }
 
 @app.post("/transactions/{transaction_id}/rerun-flow")
@@ -855,3 +847,12 @@ def rerun_sale_flow(transaction_id: int):
         url=f"/transactions/{transaction_id}?flow_status={result['status']}",
         status_code=303,
     )
+
+@app.get("/settings/google-auth/start")
+def start_google_auth():
+    try:
+        load_oauth_credentials(interactive=True)
+    except GoogleAuthenticationRequiredError:
+        return RedirectResponse(url="/settings?google_auth=failed", status_code=303)
+
+    return RedirectResponse(url="/settings?google_auth=success", status_code=303)

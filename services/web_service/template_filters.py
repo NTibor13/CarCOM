@@ -27,7 +27,7 @@ def format_transaction_type(value):
     mapping = {
         "SALE": "ELADÁS",
         "PURCHASE": "VÉTEL",
-        "SALE_STOCK_90_DAYS": "VÉTEL (90 NAP)",
+        "SALE_STOCK_90_DAYS": "ELADÁS (90 NAP)",
     }
 
     return mapping.get(value, value or "-")

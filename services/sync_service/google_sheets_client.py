@@ -320,5 +320,5 @@ class GoogleSheetsClient:
 
         return headers.index(normalized_header_name)
 
-    def _load_oauth_credentials(self) -> Credentials:
-        return load_oauth_credentials()
+    def _load_oauth_credentials(self):
+        return load_oauth_credentials(interactive=False)

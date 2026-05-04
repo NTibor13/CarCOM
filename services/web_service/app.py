@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -694,5 +695,62 @@ def sync_runs(
             "total_pages": total_pages,
             "status": status,
             "active_page": "sync_runs",
+        },
+    )
+
+@app.get("/settings", response_class=HTMLResponse)
+def settings(request: Request):
+    init_database()
+
+    integrations = [
+        {
+            "name": "Google Sheets API",
+            "configured": bool(
+                os.getenv("GOOGLE_SHEET_ID")
+                and os.getenv("GOOGLE_WORKSHEET_NAME")
+                and os.getenv("GOOGLE_RANGE")
+            ),
+        },
+        {
+            "name": "Google Drive API",
+            "configured": bool(
+                os.getenv("BILLINGO_INVOICE_DRIVE_FOLDER_ID")
+                and os.getenv("GOOGLE_CREDENTIALS_FILE")
+            ),
+        },
+        {
+            "name": "Billingo API",
+            "configured": bool(os.getenv("BILLINGO_API_KEY")),
+        },
+    ]
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT
+                group_name,
+                value,
+                normalized_value,
+                is_active
+            FROM lookup_values
+            ORDER BY group_name, value
+            """
+        )
+        lookup_rows = [dict(row) for row in cur.fetchall()]
+
+    grouped_lookup_values = {}
+    for row in lookup_rows:
+        grouped_lookup_values.setdefault(row["group_name"], []).append(row)
+
+    return templates.TemplateResponse(
+        "settings.html",
+        {
+            "request": request,
+            "active_page": "settings",
+            "environment": os.getenv("APP_ENV", "development"),
+            "database_type": "SQLite",
+            "integrations": integrations,
+            "grouped_lookup_values": grouped_lookup_values,
         },
     )

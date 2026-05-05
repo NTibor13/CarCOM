@@ -23,6 +23,9 @@ from services.web_service.template_filters import (
 
 from google.oauth2.credentials import Credentials
 
+from services.mbh_service.auth import exchange_authorization_code
+from services.mbh_service.token_manager import save_account_token_response
+
 app = FastAPI(title="CarCOM Dashboard")
 
 app.mount("/static", StaticFiles(directory="services/web_service/static"), name="static")
@@ -856,3 +859,19 @@ def start_google_auth():
         return RedirectResponse(url="/settings?google_auth=failed", status_code=303)
 
     return RedirectResponse(url="/settings?google_auth=success", status_code=303)
+
+@app.get("/mbh/callback")
+def mbh_callback(request: Request):
+    code = request.query_params.get("code")
+
+    if not code:
+        return RedirectResponse(url="/settings?mbh_auth=failed", status_code=303)
+
+    status, text, _headers = exchange_authorization_code(code)
+
+    if status != 200:
+        return RedirectResponse(url="/settings?mbh_auth=failed", status_code=303)
+
+    save_account_token_response(text)
+
+    return RedirectResponse(url="/settings?mbh_auth=success", status_code=303)

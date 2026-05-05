@@ -1,14 +1,16 @@
-from datetime import datetime, timedelta
+from datetime import date,datetime,timedelta
 from decimal import Decimal
 
 def build_billingo_payload(tx: dict) -> dict:
     transaction_date = datetime.strptime(tx["transaction_date"], "%Y-%m-%d")
 
     # due date logika
+    invoice_date = date.today()
+
     if tx["transaction_type"] == "SALE_STOCK_90_DAYS":
-        due_date = transaction_date + timedelta(days=90)
+        due_date = invoice_date + timedelta(days=90)
     else:
-        due_date = transaction_date + timedelta(days=8)
+        due_date = invoice_date + timedelta(days=8)
 
     # VAT mapping
     vat_rate = Decimal(str(tx.get("vat_rate") or "0"))

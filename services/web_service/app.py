@@ -29,10 +29,13 @@ from google.oauth2.credentials import Credentials
 from services.mbh_service.auth import exchange_authorization_code
 from services.mbh_service.token_manager import save_account_token_response
 from services.mbh_service.payment_initiation import create_domestic_payment_consent
+from services.web_service.routers import mbh_account_settings,mbh_account_sync
 
 app = FastAPI(title="CarCOM Dashboard")
 
 app.mount("/static", StaticFiles(directory="services/web_service/static"), name="static")
+app.include_router(mbh_account_settings.router)
+app.include_router(mbh_account_sync.router)
 templates = Jinja2Templates(directory="services/web_service/templates")
 
 templates.env.filters["format_huf"] = format_huf

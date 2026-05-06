@@ -780,6 +780,7 @@ def settings(request: Request):
     for row in lookup_rows:
         grouped_lookup_values.setdefault(row["group_name"], []).append(row)
     google_auth = get_google_oauth_status()
+    mbh_account_info = get_mbh_account_info_status_for_ui()
 
     return templates.TemplateResponse(
         "settings.html",
@@ -791,6 +792,7 @@ def settings(request: Request):
             "integrations": integrations,
             "grouped_lookup_values": grouped_lookup_values,
             "google_auth": google_auth,
+            "mbh_account_info": mbh_account_info,
         },
     )
 
@@ -914,3 +916,46 @@ def test_domestic_payment_consent(payload: TestDomesticPaymentConsentRequest):
         "response": response_body,
         "headers": headers,
     }
+
+def get_mbh_account_info_status_for_ui():
+    try:
+        from services.web_service.routers.mbh_account_settings import (
+            get_mbh_account_info_status,
+        )
+
+        return get_mbh_account_info_status()
+
+    except Exception as exc:
+        return {
+            "connected": False,
+            "needs_reauth": True,
+            "api_type": "account_info",
+            "message": f"MBH Account Info státusz nem olvasható: {str(exc)}",
+        }
+
+@app.post("/settings/mbh/account-info/create-consent-ui")
+def create_mbh_account_info_consent_ui():
+    from services.web_service.routers.mbh_account_settings import (
+        create_mbh_account_info_consent,
+    )
+
+    create_mbh_account_info_consent()
+
+    return RedirectResponse(
+        url="/settings?mbh_status=consent_created",
+        status_code=303,
+    )
+
+
+@app.post("/settings/mbh/account-info/sync-ui")
+def run_mbh_account_info_sync_ui(days_back: int = 7):
+    from services.web_service.routers.mbh_account_sync import (
+        run_mbh_account_info_sync,
+    )
+
+    run_mbh_account_info_sync(days_back=days_back)
+
+    return RedirectResponse(
+        url="/settings?mbh_status=sync_success",
+        status_code=303,
+    )

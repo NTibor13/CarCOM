@@ -41,5 +41,6 @@ class Settings:
     mbh_token_url: str = os.getenv("MBH_TOKEN_URL", "")
     mbh_authorization_url: str = os.getenv("MBH_AUTHORIZATION_URL", "")
     mbh_account_info_base_path: str = os.getenv("MBH_ACCOUNT_INFO_BASE_PATH", "")
+    mbh_signing_iss: str = os.getenv("MBH_SIGNING_ISS", "")
 
 settings = Settings()

@@ -1,5 +1,8 @@
 import os
 import json
+
+from pydantic import BaseModel
+
 from fastapi import HTTPException
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -25,6 +28,7 @@ from google.oauth2.credentials import Credentials
 
 from services.mbh_service.auth import exchange_authorization_code
 from services.mbh_service.token_manager import save_account_token_response
+from services.mbh_service.payment_initiation import create_domestic_payment_consent
 
 app = FastAPI(title="CarCOM Dashboard")
 
@@ -875,3 +879,35 @@ def mbh_callback(request: Request):
     save_account_token_response(text)
 
     return RedirectResponse(url="/settings?mbh_auth=success", status_code=303)
+
+class TestDomesticPaymentConsentRequest(BaseModel):
+    amount: str = "1000.00"
+    currency: str = "HUF"
+    creditor_name: str = "Teszt Partner"
+    creditor_scheme_name: str = "HU.CGI"
+    creditor_identification: str
+    reference: str | None = "CARCOM-TEST"
+
+
+@app.post("/experiments/payment/test-domestic-consent")
+def test_domestic_payment_consent(payload: TestDomesticPaymentConsentRequest):
+    status, text, headers = create_domestic_payment_consent(
+        amount=payload.amount,
+        currency=payload.currency,
+        creditor_name=payload.creditor_name,
+        creditor_scheme_name=payload.creditor_scheme_name,
+        creditor_identification=payload.creditor_identification,
+        reference=payload.reference,
+    )
+
+    try:
+
+        response_body = json.loads(text)
+    except Exception:
+        response_body = text
+
+    return {
+        "status_code": status,
+        "response": response_body,
+        "headers": headers,
+    }

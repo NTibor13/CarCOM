@@ -468,13 +468,25 @@ tbody tr:hover {
 }
 
 .flow-badge {
-  background: #dcfce7;
-  color: #166534;
-  border: 1px solid #bbf7d0;
-  border-radius: 999px;
-  padding: 7px 12px;
-  font-weight: 800;
-  font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.flow-badge-sale {
+    background: #ecfdf5;
+    color: #166534;
+    border: 1px solid #86efac;
+}
+
+.flow-badge-purchase {
+    background: #eff6ff;
+    color: #1e40af;
+    border: 1px solid #93c5fd;
 }
 
 .flow-primary-button {

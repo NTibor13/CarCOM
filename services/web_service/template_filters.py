@@ -25,8 +25,9 @@ def format_vat(value):
 
 def format_transaction_type(value):
     mapping = {
-        "SALE": "ELADÁS",
         "PURCHASE": "VÉTEL",
+        "PURCHASE FROM INDIVIDUAL": "VÉTEL MAGÁNYSZEMÉLYTŐL",
+        "SALE": "ELADÁS",
         "SALE_STOCK_90_DAYS": "ELADÁS (90 NAP)",
     }
 

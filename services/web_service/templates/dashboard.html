@@ -84,6 +84,8 @@
                     <option value="">Minden típus</option>
                     <option value="PURCHASE" {% if transaction_type==
                     "PURCHASE" %}selected{% endif %}>Vétel</option>
+                    <option value="PURCHASE FROM INDIVIDUAL" {% if transaction_type==
+                    "PURCHASE FROM INDIVIDUAL" %}selected{% endif %}>Vétel magánszemélytől</option>
                     <option value="SALE" {% if transaction_type==
                     "SALE" %}selected{% endif %}>Eladás</option>
                     <option value="SALE_STOCK_90_DAYS" {% if transaction_type==
@@ -170,8 +172,10 @@
                                 class="status status-{{ row.normalized_status|lower }}">{{ row.normalized_status }}</span>
                         </td>
                         <td>
-                            {% if row.flow_action == "BILLINGO_DRAFT_REQUIRED" %}
-                            <span class="status status-valid">Kiszámlázható</span>
+                            {% if row.flow_action == "SALES_READY" %}
+                            <span class="flow-badge flow-badge-sale">Kiszámlázható</span>
+                            {% elif row.flow_action == "PURCHASE_PAYMENT_READY" %}
+                            <span class="flow-badge flow-badge-purchase">Kifizethető</span>
                             {% endif %}
                         </td>
                     </tr>

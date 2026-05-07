@@ -128,22 +128,15 @@ def dashboard(
                 source_cost_center,
                 source_account,
                 car_name,
+                bank_account,
+                payment_notice,
                 partner_name,
                 gross_amount_huf,
                 vat_rate,
                 net_amount_huf,
                 invoice_status,
                 payment_status,
-                normalized_status,
-                CASE
-                    WHEN transaction_type IN ('SALE', 'SALE_STOCK_90_DAYS')
-                     AND source_cost_center IN ('Eladás', 'Eladás készlet 90 nap')
-                     AND partner_name = 'Kocsiguru Kft.'
-                     AND invoice_status = 'Számlára vár'
-                     AND normalized_status = 'VALID'
-                    THEN 1
-                    ELSE 0
-                END AS billingo_ready
+                normalized_status
             FROM finance_transactions
             {where_sql}
             ORDER BY {sort_by} {sort_dir}

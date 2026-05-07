@@ -175,7 +175,15 @@ class FinanceNormalizer:
         source_net = self._parse_money_decimal(raw.get("Osszeg (netto)", ""), "Osszeg (netto)", issues, required=False,
                                                absolute=True)
         source_cost_center = self._text(raw.get("Koltseghely", ""))
+        note = self._text(raw.get("Megjegyzés", ""))
+
         transaction_type = KOLTSEGHELY_MAP.get(source_cost_center, "UNKNOWN")
+
+        if source_cost_center == "Vétel":
+            normalized_note = note.lower()
+            if "magánszemély" in normalized_note or "maganszemely" in normalized_note:
+                transaction_type = "PURCHASE FROM INDIVIDUAL"
+
         car_name = self._text(raw.get("Autó", ""))
         partner_name = self._text(raw.get("Ügyfél", ""))
         bank_account = self._text(raw.get("Bankszámlaszám", ""))
@@ -186,7 +194,6 @@ class FinanceNormalizer:
         payment_status = self._text(raw.get("Státusz fizetés", ""))
         kg_debt_huf = self._parse_money_int(raw.get("KG tartozik", ""), "KG tartozik", issues, required=False,
                                             absolute=True)
-        note = self._text(raw.get("Megjegyzés", ""))
 
         self._validate_required_text(source_account, "Számla", issues)
         self._validate_required_text(source_cost_center, "Koltseghely", issues)

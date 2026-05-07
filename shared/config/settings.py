@@ -42,5 +42,17 @@ class Settings:
     mbh_authorization_url: str = os.getenv("MBH_AUTHORIZATION_URL", "")
     mbh_account_info_base_path: str = os.getenv("MBH_ACCOUNT_INFO_BASE_PATH", "")
     mbh_signing_iss: str = os.getenv("MBH_SIGNING_ISS", "")
+    mbh_environment: str = os.getenv("MBH_ENVIRONMENT", "sandbox")
+
+    mbh_qwac_cert_path: str = os.getenv("MBH_QWAC_CERT_PATH", "")
+    mbh_qwac_key_path: str = os.getenv("MBH_QWAC_KEY_PATH", "")
+
+    mbh_qseal_cert_path: str = os.getenv("MBH_QSEAL_CERT_PATH", "")
+    mbh_qseal_key_path: str = os.getenv("MBH_QSEAL_KEY_PATH", "")
+
+    mbh_signing_issuer: str = os.getenv(
+        "MBH_SIGNING_ISSUER",
+        "C=HU, ST=Hungary, L=Dunakeszi, O=NF Office Kft.",
+    )
 
 settings = Settings()

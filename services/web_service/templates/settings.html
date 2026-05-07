@@ -18,7 +18,47 @@
                 <p>Rendszerkonfigurációk és üzleti törzsértékek áttekintése.</p>
             </div>
         </div>
+        <div id="toast-container" class="toast-container">
+            {% if mbh_auth == "success" %}
+            <div class="toast toast-success">
+                <span class="toast-icon">✓</span>
+                <div>
+                    <strong>MBH kapcsolat sikeres</strong>
+                    <p>Az MBH banki kapcsolat sikeresen hitelesítve.</p>
+                </div>
+                <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+            </div>
+            {% elif mbh_auth == "failed" %}
+            <div class="toast toast-error">
+                <span class="toast-icon">!</span>
+                <div>
+                    <strong>MBH hitelesítés sikertelen</strong>
+                    <p>{{ mbh_message or "A banki hitelesítés sikertelen vagy megszakadt." }}</p>
+                </div>
+                <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+            </div>
+            {% endif %}
 
+            {% if mbh_status == "consent_created" %}
+            <div class="toast toast-info">
+                <span class="toast-icon">i</span>
+                <div>
+                    <strong>MBH consent létrehozva</strong>
+                    <p>Következő lépés: indítsd el az MBH authentikációt.</p>
+                </div>
+                <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+            </div>
+            {% elif mbh_status == "sync_success" %}
+            <div class="toast toast-success">
+                <span class="toast-icon">✓</span>
+                <div>
+                    <strong>Szinkron sikeres</strong>
+                    <p>Az MBH banki szinkron sikeresen lefutott.</p>
+                </div>
+                <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+            </div>
+            {% endif %}
+        </div>
         <div class="cards">
             <div class="card">
                 <span>Környezet</span>
@@ -70,10 +110,22 @@
             </div>
             {% endif %}
         </div>
-        ## MBH Account Info
-
-        <div class="panel" style="margin-bottom: 24px;">
-            <h3>MBH Account Info kapcsolat</h3>
+        <div class="panel" style="margin-top: 24px;margin-bottom: 24px">
+            <h2>MBH Account Info kapcsolat</h2>
+            {% if mbh_account_info and mbh_account_info.ui_status %}
+            <div class="mbh-action-status mbh-action-{{ mbh_account_info.ui_status.level }}">
+                <div>
+                    <strong>{{ mbh_account_info.ui_status.title }}</strong>
+                    <p>{{ mbh_account_info.ui_status.message }}</p>
+                    <small>
+                        <strong>Aktuális teendő:</strong>
+                        {{ mbh_account_info.ui_status.user_action }}
+                    </small>
+                    <br>
+                    <small>{{ mbh_account_info.ui_status.action_hint }}</small>
+                </div>
+            </div>
+            {% endif %}
 
             {% if mbh_account_info.connected %}
             <p>
@@ -96,7 +148,7 @@
                 <dd>{{ mbh_account_info.consent_expires_at or "-" }}</dd>
 
                 <dt>Token lejárat</dt>
-                <dd>{{ mbh_account_info.token_expires_at or "-" }}</dd>
+                <dd>{{ mbh_account_info.access_token_expires_at or "-" }}</dd>
 
                 <dt>Scope</dt>
                 <dd>{{ mbh_account_info.scope or "-" }}</dd>
@@ -114,24 +166,37 @@
 
             <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 18px;">
                 <form method="post" action="/settings/mbh/account-info/create-consent-ui">
-                    <button class="primary-button" type="submit">
+                    <button
+                            class="{% if mbh_account_info.ui_status.can_create_consent %}primary-button{% else %}secondary-button disabled-button{% endif %}"
+                            type="submit"
+                            {% if not mbh_account_info.ui_status.can_create_consent %}disabled{% endif %}
+                    >
                         Új MBH consent létrehozása
                     </button>
                 </form>
 
-                <a class="secondary-button" href="/settings/mbh/account-info/authorize">
+                <a
+                        class="{% if mbh_account_info.ui_status.can_authorize %}primary-button{% else %}secondary-button disabled-button{% endif %}"
+                        {% if mbh_account_info.ui_status.can_authorize %}
+                        href="/settings/mbh/account-info/authorize"
+                        {% endif %}
+                >
                     MBH authentikáció indítása
                 </a>
 
                 <form method="post" action="/settings/mbh/account-info/sync-ui">
                     <input type="hidden" name="days_back" value="7">
-                    <button class="primary-button" type="submit">
+                    <button
+                            class="{% if mbh_account_info.ui_status.can_sync %}primary-button{% else %}secondary-button disabled-button{% endif %}"
+                            type="submit"
+                            {% if not mbh_account_info.ui_status.can_sync %}disabled{% endif %}
+                    >
                         Banki szinkron futtatása
                     </button>
                 </form>
             </div>
         </div>
-        <div class="panel">
+        <div class="panel" style="margin-bottom: 24px">
             <h2>Integrációk</h2>
 
             <div class="table-wrap">
@@ -202,5 +267,16 @@
         </div>
     </main>
 </div>
+<script>
+    setTimeout(() => {
+        document.querySelectorAll(".toast").forEach((toast) => {
+            toast.style.opacity = "0";
+            toast.style.transform = "translateX(24px)";
+            toast.style.transition = "all 0.25s ease-out";
+
+            setTimeout(() => toast.remove(), 300);
+        });
+    }, 6000);
+</script>
 </body>
 </html>

@@ -8,6 +8,7 @@ from services.mbh_service.auth import (
     build_payment_jws_signature,
     get_payment_tpp_access_token,
 )
+from services.mbh_service.certificates import get_mbh_mtls_cert
 
 
 def create_domestic_payment_consent(
@@ -69,6 +70,7 @@ def create_domestic_payment_consent(
             "x-jws-signature": jws_signature,
         },
         timeout=30,
+        cert=get_mbh_mtls_cert(),
     )
 
     return response.status_code, response.text, dict(response.headers)

@@ -1,3 +1,9 @@
+import requests
+import json
+
+from datetime import datetime, timezone
+from urllib.parse import urlencode
+
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from shared.database.connection import get_connection
@@ -7,10 +13,7 @@ from services.mbh_service.auth import (
     exchange_authorization_code,
     refresh_psu_access_token,
 )
-import requests
-import json
-from datetime import datetime, timezone
-
+from services.mbh_service.certificates import validate_mbh_certificate_configuration
 
 router = APIRouter(
     prefix="/settings/mbh/account-info",
@@ -74,11 +77,61 @@ def get_mbh_account_info_status():
             "token_type": token.get("token_type"),
             "created_at": token.get("created_at"),
             "updated_at": token.get("updated_at"),
+            "ui_status": build_mbh_account_info_ui_status(token),
         }
 
     finally:
         conn.close()
 
+
+def build_mbh_account_info_ui_status(token: dict | None) -> dict:
+    if not token:
+        return {
+            "level": "warning",
+            "title": "MBH Account Info nincs előkészítve",
+            "message": "Első lépésként hozz létre Account Info consentet.",
+            "user_action": "Consent létrehozása szükséges",
+            "action_hint": "Kattints a Consent létrehozása gombra.",
+        }
+
+    consent_id = token.get("consent_id")
+    access_token = token.get("access_token")
+    refresh_token = token.get("refresh_token")
+
+    if consent_id and not access_token:
+        return {
+            "level": "info",
+            "title": "MBH felhasználói hitelesítés szükséges",
+            "message": "A consent létrejött, de a banki felhasználói authentikáció még nem történt meg.",
+            "user_action": "Felhasználói authentikációra vár",
+            "action_hint": "Kattints az MBH authentikáció indítása gombra.",
+            "can_create_consent": True,
+            "can_authorize": True,
+            "can_sync": False,
+        }
+
+    if consent_id and access_token:
+        return {
+            "level": "success",
+            "title": "MBH Account Info aktív",
+            "message": "A banki kapcsolat aktív, a tokenek rendelkezésre állnak.",
+            "user_action": "Nincs felhasználói teendő",
+            "action_hint": "Indítható manuális szinkron.",
+            "can_create_consent": True,
+            "can_authorize": True,
+            "can_sync": True,
+        }
+
+    return {
+        "level": "warning",
+        "title": "MBH kapcsolat részleges állapotban",
+        "message": "A kapcsolat állapota nem teljes. Ellenőrizd a consent és token adatokat.",
+        "user_action": "Ellenőrzés szükséges",
+        "action_hint": "Próbáld újra a consent létrehozását.",
+        "can_create_consent": True,
+        "can_authorize": False,
+        "can_sync": False,
+    }
 
 def dict_factory(cursor, row):
     return {
@@ -249,42 +302,35 @@ def mbh_account_info_callback(
     error: str | None = None,
 ):
     if error:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "message": "MBH authentikáció sikertelen",
-                "error": error,
-            },
-        )
+        params = urlencode({
+            "mbh_auth": "failed",
+            "mbh_message": f"MBH authentikáció sikertelen: {error}",
+        })
+        return RedirectResponse(url=f"/settings?{params}", status_code=303)
 
     if not code:
-        raise HTTPException(
-            status_code=400,
-            detail="Hiányzó authorization code",
-        )
+        params = urlencode({
+            "mbh_auth": "failed",
+            "mbh_message": "Hiányzó authorization code az MBH callback válaszban.",
+        })
+        return RedirectResponse(url=f"/settings?{params}", status_code=303)
 
     status_code, response_text, _ = exchange_authorization_code(code)
 
     if status_code != 200:
-        raise HTTPException(
-            status_code=status_code,
-            detail={
-                "message": "Authorization code token cseréje sikertelen",
-                "mbh_response": response_text,
-            },
-        )
+        params = urlencode({
+            "mbh_auth": "failed",
+            "mbh_message": "Authorization code token cseréje sikertelen.",
+        })
+        return RedirectResponse(url=f"/settings?{params}", status_code=303)
 
     token_response = json.loads(response_text)
-
     save_account_info_tokens(token_response)
 
-    return {
-        "success": True,
-        "message": "MBH Account Info authentikáció sikeres",
-        "token_type": token_response.get("token_type"),
-        "scope": token_response.get("scope"),
-        "expires_in": token_response.get("expires_in"),
-    }
+    return RedirectResponse(
+        url="/settings?mbh_auth=success",
+        status_code=303,
+    )
 
 def save_account_info_tokens(token_response: dict):
     now = datetime.now(timezone.utc)
@@ -496,3 +542,16 @@ def get_mbh_account_transactions(
         )
 
     return response.json()
+
+@router.get("/certificate-check")
+def mbh_certificate_check():
+    try:
+        return {
+            "ok": True,
+            "certificate_status": validate_mbh_certificate_configuration(),
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": str(exc),
+        }

@@ -793,6 +793,10 @@ def settings(request: Request):
             "grouped_lookup_values": grouped_lookup_values,
             "google_auth": google_auth,
             "mbh_account_info": mbh_account_info,
+            "mbh_auth": request.query_params.get("mbh_auth"),
+            "mbh_status": request.query_params.get("mbh_status"),
+            "mbh_message": request.query_params.get("mbh_message"),
+            "google_auth_result": request.query_params.get("google_auth"),
         },
     )
 

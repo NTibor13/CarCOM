@@ -12,14 +12,18 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from shared.config.settings import settings
 
+from services.mbh_service.certificates import (
+    get_mbh_signing_issuer,
+    load_mbh_signing_private_key_pem,
+    load_mbh_signing_public_key_pem,
+)
+
 
 CLIENT_ASSERTION_TYPE = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
-PAYMENT_SIGNATURE_ISSUER = "C=UK, ST=England, L=London, O=Acme Ltd."
 
 
 def _load_private_key() -> str:
-    with open(settings.mbh_private_key_path, "r", encoding="utf-8") as key_file:
-        return key_file.read()
+    return load_mbh_signing_private_key_pem()
 
 
 def _b64url(data: bytes) -> str:
@@ -265,8 +269,7 @@ def generate_public_key_thumbprint(public_key_pem: str) -> str:
 
 
 def get_payment_signing_key_id() -> str:
-    with open(settings.mbh_public_key_path, "r", encoding="utf-8") as key_file:
-        return generate_public_key_thumbprint(key_file.read())
+    return generate_public_key_thumbprint(load_mbh_signing_public_key_pem())
 
 
 def build_payment_jws_signature(*, payload: dict) -> str:
@@ -280,7 +283,7 @@ def build_payment_jws_signature(*, payload: dict) -> str:
         "kid": get_payment_signing_key_id(),
         "b64": False,
         "http://openbanking.org.uk/iat": int(time.time()) - 60,
-        "http://openbanking.org.uk/iss": PAYMENT_SIGNATURE_ISSUER,
+        "http://openbanking.org.uk/iss": get_mbh_signing_issuer(),
         "crit": [
             "b64",
             "http://openbanking.org.uk/iat",

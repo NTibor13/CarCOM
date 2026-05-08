@@ -49,7 +49,7 @@
             </div>
         </section>
 
-        {% if transaction.flow_action == "BILLINGO_DRAFT_REQUIRED" %}
+        {% if transaction.flow_action == "SALES_READY" %}
         <section class="flow-block">
             <div class="flow-content">
                 <div class="flow-icon">✓</div>
@@ -66,7 +66,7 @@
             <div class="flow-side">
                 <span class="flow-badge">Kiszámlázható</span>
 
-                {% if transaction.flow_action == "BILLINGO_DRAFT_REQUIRED" %}
+                {% if transaction.flow_action == "SALES_READY" %}
                 <div class="action-panel">
                     {% if not latest_flow_run %}
                     <form method="post" action="/transactions/{{ transaction.id }}/approve-billingo">
@@ -100,7 +100,7 @@
                     </form>
                     {% endif %}
 
-                    {% if latest_flow_run and transaction.flow_action == "BILLINGO_DRAFT_REQUIRED" %}
+                    {% if latest_flow_run and transaction.flow_action == "SALES_READY" %}
                     <form method="post" action="/transactions/{{ transaction.id }}/rerun-flow">
                         <button type="submit" class="secondary-button">
                             Új folyamat indítása
@@ -129,6 +129,29 @@
             </div>
             {% endif %}
         </section>
+        {% endif %}
+
+        {% if transaction.flow_action == "PURCHASE_PAYMENT_READY" %}
+
+        <section class="flow-card flow-card-ready">
+            <div class="flow-card-header">
+                <div>
+                    <div class="flow-card-label">Vásárlási folyamat</div>
+                    <h2>Ez a tranzakció kifizetésre előkészíthető</h2>
+                </div>
+            </div>
+
+            <p>
+                A rendszer MBH API hívás nélkül számlaköteg tételt fog létrehozni.
+            </p>
+
+            <form method="post" action="/transactions/{{ transaction.id }}/approve-purchase">
+                <button class="btn btn-primary" type="submit">
+                    Vásárlási folyamat jóváhagyása és indítása
+                </button>
+            </form>
+        </section>
+
         {% endif %}
         <section class="panel flow-timeline-panel" id="flow-container" data-transaction-id="{{ transaction.id }}">
             <div class="section-header">
@@ -207,6 +230,44 @@
                 {% endif %}
             </div>
         </section>
+        {% if payment_batch_info %}
+
+        <section class="panel">
+
+            <h2>Kifizetési köteg</h2>
+
+            <table>
+                <thead>
+                <tr>
+                    <th>Típus</th>
+                    <th>Köteg</th>
+                    <th>Köteg státusz</th>
+                    <th>Tétel státusz</th>
+                    <th>Összeg</th>
+                    <th>Közlemény</th>
+                    <th>Link</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr>
+                    <td>Kifizetési köteg</td>
+                    <td>#{{ payment_batch_info.payment_batch_id }}</td>
+                    <td>{{ payment_batch_info.payment_batch_status }}</td>
+                    <td>{{ payment_batch_info.payment_batch_item_status }}</td>
+                    <td>{{ payment_batch_info.amount_huf | format_huf }}</td>
+                    <td>{{ payment_batch_info.payment_notice or "-" }}</td>
+                    <td>
+                        <a class="btn btn-secondary"
+                           href="/payment-batches/{{ payment_batch_info.payment_batch_id }}">
+                            Megnyitás
+                        </a>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </section>
+
+        {% endif %}
         <section class="panel">
             <h2>Dokumentumok</h2>
 

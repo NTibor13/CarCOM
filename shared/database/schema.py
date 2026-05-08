@@ -151,6 +151,32 @@ def init_database() -> None:
         """)
 
         cur.execute("""
+        CREATE TABLE IF NOT EXISTS payment_batches (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
+
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS payment_batch_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_id INTEGER NOT NULL,
+            transaction_id INTEGER NOT NULL UNIQUE,
+            creditor_name TEXT NOT NULL,
+            creditor_bank_account TEXT NOT NULL,
+            amount_huf INTEGER NOT NULL,
+            payment_notice TEXT,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(batch_id) REFERENCES payment_batches(id),
+            FOREIGN KEY(transaction_id) REFERENCES finance_transactions(id)
+        )
+        """)
+
+        cur.execute("""
         CREATE TABLE IF NOT EXISTS api_call_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             provider TEXT NOT NULL,

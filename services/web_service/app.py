@@ -29,7 +29,7 @@ from google.oauth2.credentials import Credentials
 from services.mbh_service.auth import exchange_authorization_code
 from services.mbh_service.token_manager import save_account_token_response
 from services.mbh_service.payment_initiation import create_domestic_payment_consent
-from services.web_service.routers import mbh_account_settings,mbh_account_sync
+from services.web_service.routers import mbh_account_settings, mbh_account_sync
 
 app = FastAPI(title="CarCOM Dashboard")
 
@@ -41,6 +41,7 @@ templates = Jinja2Templates(directory="services/web_service/templates")
 templates.env.filters["format_huf"] = format_huf
 templates.env.filters["format_vat"] = format_vat
 templates.env.filters["format_transaction_type"] = format_transaction_type
+
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard(
@@ -420,6 +421,27 @@ def transaction_details(request: Request, transaction_id: int, approval_status: 
         latest_flow_run = cur.fetchone()
         latest_flow_run = dict(latest_flow_run) if latest_flow_run else None
 
+        cur.execute(
+            """
+            SELECT
+                pbi.id AS payment_batch_item_id,
+                pbi.status AS payment_batch_item_status,
+                pbi.amount_huf,
+                pbi.payment_notice,
+                pb.id AS payment_batch_id,
+                pb.status AS payment_batch_status,
+                pb.created_at AS payment_batch_created_at
+            FROM payment_batch_items pbi
+            JOIN payment_batches pb ON pb.id = pbi.batch_id
+            WHERE pbi.transaction_id = ?
+            ORDER BY pbi.id DESC
+            LIMIT 1
+            """,
+            (transaction_id,),
+        )
+        payment_batch_info = cur.fetchone()
+        payment_batch_info = dict(payment_batch_info) if payment_batch_info else None
+
     return templates.TemplateResponse(
         "transaction_details.html",
         {
@@ -432,6 +454,7 @@ def transaction_details(request: Request, transaction_id: int, approval_status: 
             "billingo_invoice_link": billingo_invoice_link,
             "latest_flow_run": latest_flow_run,
             "active_page": "dashboard",
+            "payment_batch_info":payment_batch_info,
         },
     )
 
@@ -476,6 +499,7 @@ def approve_billingo_draft(transaction_id: int):
             url=f"/transactions/{transaction['id']}?flow_status={status}",
             status_code=303,
         )
+
 
 @app.get("/api-logs", response_class=HTMLResponse)
 def api_logs(
@@ -615,6 +639,7 @@ def api_log_detail(request: Request, log_id: int):
         },
     )
 
+
 @app.get("/api/flow/{transaction_id}")
 def get_flow(transaction_id: int):
     with get_connection() as conn:
@@ -654,11 +679,12 @@ def get_flow(transaction_id: int):
         "active_page": "dashboard",
     }
 
+
 @app.get("/sync-runs", response_class=HTMLResponse)
 def sync_runs(
-    request: Request,
-    page: int = Query(1, ge=1),
-    status: str = "",
+        request: Request,
+        page: int = Query(1, ge=1),
+        status: str = "",
 ):
     init_database()
 
@@ -728,6 +754,7 @@ def sync_runs(
         },
     )
 
+
 @app.get("/settings", response_class=HTMLResponse)
 def settings(request: Request):
     init_database()
@@ -793,6 +820,7 @@ def settings(request: Request):
         },
     )
 
+
 def get_google_oauth_status():
     token_file = app_settings.google_oauth_token_file
 
@@ -818,6 +846,7 @@ def get_google_oauth_status():
             "status": "HIBÁS",
             "has_refresh_token": False,
         }
+
 
 @app.post("/transactions/{transaction_id}/rerun-flow")
 def rerun_sale_flow(transaction_id: int):
@@ -857,6 +886,7 @@ def rerun_sale_flow(transaction_id: int):
         status_code=303,
     )
 
+
 @app.get("/settings/google-auth/start")
 def start_google_auth():
     try:
@@ -865,6 +895,7 @@ def start_google_auth():
         return RedirectResponse(url="/settings?google_auth=failed", status_code=303)
 
     return RedirectResponse(url="/settings?google_auth=success", status_code=303)
+
 
 @app.get("/mbh/callback")
 def mbh_callback(request: Request):
@@ -881,6 +912,7 @@ def mbh_callback(request: Request):
     save_account_token_response(text)
 
     return RedirectResponse(url="/settings?mbh_auth=success", status_code=303)
+
 
 class TestDomesticPaymentConsentRequest(BaseModel):
     amount: str = "1000.00"
@@ -914,6 +946,7 @@ def test_domestic_payment_consent(payload: TestDomesticPaymentConsentRequest):
         "headers": headers,
     }
 
+
 def get_mbh_account_info_status_for_ui():
     try:
         from services.web_service.routers.mbh_account_settings import (
@@ -929,6 +962,7 @@ def get_mbh_account_info_status_for_ui():
             "api_type": "account_info",
             "message": f"MBH Account Info státusz nem olvasható: {str(exc)}",
         }
+
 
 @app.post("/settings/mbh/account-info/create-consent-ui")
 def create_mbh_account_info_consent_ui():
@@ -954,5 +988,37 @@ def run_mbh_account_info_sync_ui(days_back: int = 7):
 
     return RedirectResponse(
         url="/settings?mbh_status=sync_success",
+        status_code=303,
+    )
+
+
+@app.post("/transactions/{transaction_id}/approve-purchase")
+def approve_purchase_flow(transaction_id: int):
+    init_database()
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT * FROM finance_transactions WHERE id = ?",
+            (transaction_id,),
+        )
+        transaction = cur.fetchone()
+
+    if transaction is None:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    transaction = dict(transaction)
+    flow_result = evaluate_transaction(transaction)
+
+    if flow_result["action"] != "PURCHASE_PAYMENT_READY":
+        return RedirectResponse(
+            url=f"/transactions/{transaction_id}?approval_status=not_ready",
+            status_code=303,
+        )
+
+    result = FlowExecutor().run_purchase_flow(transaction_id)
+
+    return RedirectResponse(
+        url=f"/transactions/{transaction_id}?flow_status={result['status']}",
         status_code=303,
     )

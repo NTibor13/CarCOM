@@ -29,7 +29,7 @@ def create_billingo_draft_step(context: dict) -> dict:
     transaction = _get_transaction(transaction_id)
 
     flow_result = evaluate_transaction(transaction)
-    if flow_result["action"] != "BILLINGO_DRAFT_REQUIRED":
+    if flow_result["action"] != "SALES_READY":
         return {
             "status": "skipped",
             "reason": flow_result["reason"],

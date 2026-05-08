@@ -1,5 +1,9 @@
 from services.flow_service.flow_repository import FlowRepository
-from services.flow_service.flow_steps import SALE_FLOW_STEPS, STEP_HANDLERS
+from services.flow_service.flow_steps import (
+    SALE_FLOW_STEPS,
+    PURCHASE_FLOW_STEPS,
+    STEP_HANDLERS,
+)
 
 
 class FlowExecutor:
@@ -7,15 +11,37 @@ class FlowExecutor:
         self.repository = repository or FlowRepository()
 
     def run_sale_flow(self, transaction_id: int, force_new_run: bool = False) -> dict:
+        return self._run_flow(
+            transaction_id=transaction_id,
+            flow_type="SALE",
+            steps=SALE_FLOW_STEPS,
+            force_new_run=force_new_run,
+        )
+
+    def run_purchase_flow(self, transaction_id: int, force_new_run: bool = False) -> dict:
+        return self._run_flow(
+            transaction_id=transaction_id,
+            flow_type="PURCHASE",
+            steps=PURCHASE_FLOW_STEPS,
+            force_new_run=force_new_run,
+        )
+
+    def _run_flow(
+        self,
+        transaction_id: int,
+        flow_type: str,
+        steps: list[dict],
+        force_new_run: bool = False,
+    ) -> dict:
         if force_new_run:
             flow_run = self.repository.create_flow_run(
                 transaction_id=transaction_id,
-                flow_type="SALE",
+                flow_type=flow_type,
             )
         else:
             flow_run = self.repository.get_or_create_flow_run(
                 transaction_id=transaction_id,
-                flow_type="SALE",
+                flow_type=flow_type,
             )
 
         flow_run_id = flow_run["id"]
@@ -25,7 +51,7 @@ class FlowExecutor:
         skipped_steps = []
 
         try:
-            for step in SALE_FLOW_STEPS:
+            for step in steps:
                 step_name = step["name"]
                 step_order = step["order"]
 
@@ -45,7 +71,7 @@ class FlowExecutor:
 
                 context = {
                     "transaction_id": transaction_id,
-                    "flow_type": "SALE",
+                    "flow_type": flow_type,
                     "flow_run_id": flow_run_id,
                     "step_name": step_name,
                 }

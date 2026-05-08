@@ -1022,3 +1022,94 @@ def approve_purchase_flow(transaction_id: int):
         url=f"/transactions/{transaction_id}?flow_status={result['status']}",
         status_code=303,
     )
+
+@app.get("/payment-batches", response_class=HTMLResponse)
+def payment_batches(request: Request):
+    init_database()
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT
+                pb.id,
+                pb.status,
+                pb.created_at,
+                pb.updated_at,
+                COUNT(pbi.id) AS item_count,
+                COALESCE(SUM(pbi.amount_huf), 0) AS total_amount_huf
+            FROM payment_batches pb
+            LEFT JOIN payment_batch_items pbi ON pbi.batch_id = pb.id
+            GROUP BY pb.id
+            ORDER BY pb.id DESC
+        """)
+        batches = [dict(row) for row in cur.fetchall()]
+
+    return templates.TemplateResponse(
+        "payment_batches.html",
+        {
+            "request": request,
+            "batches": batches,
+            "active_page": "payment_batches",
+        },
+    )
+
+
+@app.get("/payment-batches/{batch_id}", response_class=HTMLResponse)
+def payment_batch_details(request: Request, batch_id: int):
+    init_database()
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT
+                pb.id,
+                pb.status,
+                pb.created_at,
+                pb.updated_at,
+                COUNT(pbi.id) AS item_count,
+                COALESCE(SUM(pbi.amount_huf), 0) AS total_amount_huf
+            FROM payment_batches pb
+            LEFT JOIN payment_batch_items pbi ON pbi.batch_id = pb.id
+            WHERE pb.id = ?
+            GROUP BY pb.id
+        """, (batch_id,))
+        batch = cur.fetchone()
+
+        if batch is None:
+            raise HTTPException(status_code=404, detail="Payment batch not found")
+
+        batch = dict(batch)
+
+        cur.execute("""
+            SELECT
+                pbi.id AS payment_batch_item_id,
+                pbi.status AS payment_batch_item_status,
+                pbi.creditor_name,
+                pbi.creditor_bank_account,
+                pbi.amount_huf,
+                pbi.payment_notice,
+                pbi.created_at,
+                t.id AS transaction_id,
+                t.source_row_number,
+                t.external_id,
+                t.car_name,
+                t.partner_name,
+                t.transaction_type,
+                t.payment_status
+            FROM payment_batch_items pbi
+            JOIN finance_transactions t ON t.id = pbi.transaction_id
+            WHERE pbi.batch_id = ?
+            ORDER BY pbi.id ASC
+        """, (batch_id,))
+        items = [dict(row) for row in cur.fetchall()]
+
+    return templates.TemplateResponse(
+        "payment_batch_details.html",
+        {
+            "request": request,
+            "batch": batch,
+            "items": items,
+            "active_page": "payment_batches",
+        },
+    )

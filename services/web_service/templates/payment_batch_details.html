@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <title>CarCOM - Kifizetési köteg #{{ batch.id }}</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div class="app-shell">
+    <aside class="sidebar">
+        {% include "partials/nav.html" %}
+    </aside>
+
+    <main class="main">
+        <div class="topbar">
+            <div>
+                <h1>Kifizetési köteg #{{ batch.id }}</h1>
+                <p>Köteg státusz: {{ batch.status }} · Létrehozva: {{ batch.created_at }}</p>
+            </div>
+
+            <a class="secondary-button" href="/payment-batches">
+                Vissza a kötegekhez
+            </a>
+        </div>
+
+        <div class="cards">
+            <div class="card">
+                <span>Státusz</span>
+                <strong>{{ batch.status }}</strong>
+            </div>
+
+            <div class="card">
+                <span>Tételek száma</span>
+                <strong>{{ batch.item_count }}</strong>
+            </div>
+
+            <div class="card">
+                <span>Teljes összeg</span>
+                <strong>{{ batch.total_amount_huf | format_huf }}</strong>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="section-header">
+                <div>
+                    <h2>Kifizetési tételek</h2>
+                    <p>A köteghez kapcsolt vásárlási tranzakciók.</p>
+                </div>
+            </div>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Tranzakció</th>
+                        <th>Autó</th>
+                        <th>Kedvezményezett</th>
+                        <th>Bankszámla</th>
+                        <th class="number">Összeg</th>
+                        <th>Közlemény</th>
+                        <th>Tétel státusz</th>
+                        <th>Fizetési státusz</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for item in items %}
+                    <tr>
+                        <td>
+                            <a class="table-link" href="/transactions/{{ item.transaction_id }}">
+                                #{{ item.transaction_id }}
+                            </a>
+                        </td>
+                        <td>{{ item.car_name or "-" }}</td>
+                        <td>{{ item.creditor_name }}</td>
+                        <td>{{ item.creditor_bank_account }}</td>
+                        <td class="number">{{ item.amount_huf | format_huf }}</td>
+                        <td>{{ item.payment_notice or "-" }}</td>
+                        <td><span class="badge">{{ item.payment_batch_item_status }}</span></td>
+                        <td>{{ item.payment_status or "-" }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="empty-state">
+                            Ebben a kötegben még nincs tétel.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+</body>
+</html>

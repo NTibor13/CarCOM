@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <title>CarCOM - Kifizetési kötegek</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="app-shell">
+    <aside class="sidebar">
+        {% include "partials/nav.html" %}
+    </aside>
+
+    <main class="main">
+        <div class="topbar">
+            <div>
+                <h1>Kifizetési kötegek</h1>
+                <p>Vásárlási folyamatból előállított kifizetési előkészítések.</p>
+            </div>
+        </div>
+
+        <div class="cards">
+            <div class="card">
+                <span>Kötegek száma</span>
+                <strong>{{ batches | length }}</strong>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="section-header">
+                <div>
+                    <h2>Kötegek</h2>
+                    <p>OPEN és később lezárt kifizetési kötegek listája.</p>
+                </div>
+            </div>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Köteg</th>
+                        <th>Státusz</th>
+                        <th>Tételek száma</th>
+                        <th class="number">Összeg</th>
+                        <th>Létrehozva</th>
+                        <th>Megnyitás</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for batch in batches %}
+                    <tr>
+                        <td><span class="badge">#{{ batch.id }}</span></td>
+                        <td><span class="status status-warning">{{ batch.status }}</span></td>
+                        <td>{{ batch.item_count }}</td>
+                        <td class="number">{{ batch.total_amount_huf | format_huf }}</td>
+                        <td>{{ batch.created_at }}</td>
+                        <td>
+                            <a class="table-link" href="/payment-batches/{{ batch.id }}">
+                                Megnyitás
+                            </a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="empty-state">
+                            Még nincs kifizetési köteg.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+</body>
+</html>

@@ -1,5 +1,6 @@
 import os
 import json
+import math
 
 from pydantic import BaseModel
 
@@ -17,6 +18,8 @@ from shared.config.settings import settings as app_settings
 from services.main_service.app import run_pipeline_once
 from services.flow_service.flow_engine import evaluate_transaction
 from services.flow_service.flow_executor import FlowExecutor
+from services.flow_service.purchase_batch_executor import PurchaseBatchExecutor
+from services.payment_batch_service.payment_batch_repository import PaymentBatchRepository
 from services.billingo_service.invoice_link_repository import get_latest_invoice_link
 from services.web_service.template_filters import (
     format_huf,
@@ -31,7 +34,7 @@ from services.mbh_service.token_manager import save_account_token_response
 from services.mbh_service.payment_initiation import create_domestic_payment_consent
 from services.web_service.routers import mbh_account_settings, mbh_account_sync
 
-app = FastAPI(title="CarCOM Dashboard")
+app = FastAPI(title="CarCOM")
 
 app.mount("/static", StaticFiles(directory="services/web_service/static"), name="static")
 app.include_router(mbh_account_settings.router)
@@ -45,19 +48,19 @@ templates.env.filters["format_transaction_type"] = format_transaction_type
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard(
-        request: Request,
-        page: int = Query(1, ge=1),
-        search: str = "",
-        sort_by: str = "source_row_number",
-        sort_dir: str = "desc",
-        transaction_type: str = "",
-        normalized_status: str = "",
-        sync_status: str = "",
+    request: Request,
+    purchase_page: int = Query(1, ge=1),
+    sales_page: int = Query(1, ge=1),
+    search: str = "",
+    sort_by: str = "source_row_number",
+    sort_dir: str = "desc",
+    transaction_type: str = "",
+    normalized_status: str = "",
+    sync_status: str = "",
 ):
     init_database()
 
     page_size = 25
-    offset = (page - 1) * page_size
 
     allowed_sort_columns = {
         "source_row_number",
@@ -141,9 +144,8 @@ def dashboard(
             FROM finance_transactions
             {where_sql}
             ORDER BY {sort_by} {sort_dir}
-            LIMIT ? OFFSET ?
             """,
-            [*params, page_size, offset],
+            params,
         )
 
         rows = []
@@ -154,6 +156,40 @@ def dashboard(
             row_dict["flow_action"] = flow_result["action"]
             row_dict["flow_reason"] = flow_result["reason"]
             rows.append(row_dict)
+
+        all_purchase_rows = [
+            row for row in rows
+            if row.get("transaction_type") in (
+                "PURCHASE",
+                "PURCHASE FROM INDIVIDUAL",
+            )
+        ]
+
+        all_sales_rows = [
+            row for row in rows
+            if row.get("transaction_type") in (
+                "SALE",
+                "SALE_STOCK_90_DAYS",
+            )
+        ]
+
+        purchase_total_count = len(all_purchase_rows)
+        sales_total_count = len(all_sales_rows)
+
+        purchase_total_pages = max(1, math.ceil(purchase_total_count / page_size))
+        sales_total_pages = max(1, math.ceil(sales_total_count / page_size))
+
+        purchase_page = max(1, min(purchase_page, purchase_total_pages))
+        sales_page = max(1, min(sales_page, sales_total_pages))
+
+        purchase_start = (purchase_page - 1) * page_size
+        purchase_end = purchase_start + page_size
+
+        sales_start = (sales_page - 1) * page_size
+        sales_end = sales_start + page_size
+
+        purchase_rows = all_purchase_rows[purchase_start:purchase_end]
+        sales_rows = all_sales_rows[sales_start:sales_end]
 
         cur.execute("""
             SELECT transaction_type, COUNT(*) AS count
@@ -190,14 +226,16 @@ def dashboard(
         latest_sync_run = cur.fetchone()
         latest_sync_run = dict(latest_sync_run) if latest_sync_run else None
 
-    total_pages = max((total_count + page_size - 1) // page_size, 1)
+    total_pages = 1
 
     return templates.TemplateResponse(
         "dashboard.html",
         {
             "request": request,
             "rows": rows,
-            "page": page,
+            "purchase_rows": purchase_rows,
+            "sales_rows": sales_rows,
+            "page": 1,
             "page_size": page_size,
             "total_count": total_count,
             "total_pages": total_pages,
@@ -211,6 +249,12 @@ def dashboard(
             "latest_sync_run": latest_sync_run,
             "sync_status": sync_status,
             "active_page": "dashboard",
+            "purchase_page": purchase_page,
+            "purchase_total_pages": purchase_total_pages,
+            "purchase_total_count": purchase_total_count,
+            "sales_page": sales_page,
+            "sales_total_pages": sales_total_pages,
+            "sales_total_count": sales_total_count,
         },
     )
 
@@ -454,7 +498,7 @@ def transaction_details(request: Request, transaction_id: int, approval_status: 
             "billingo_invoice_link": billingo_invoice_link,
             "latest_flow_run": latest_flow_run,
             "active_page": "dashboard",
-            "payment_batch_info":payment_batch_info,
+            "payment_batch_info": payment_batch_info,
         },
     )
 
@@ -482,7 +526,7 @@ def approve_billingo_draft(transaction_id: int):
         transaction = dict(transaction)
         flow_result = evaluate_transaction(transaction)
 
-        if flow_result["action"] != "BILLINGO_DRAFT_REQUIRED":
+        if flow_result["action"] != "SALES_READY":
             return RedirectResponse(
                 url=f"/transactions/{transaction_id}?approval_status=not_ready",
                 status_code=303,
@@ -870,7 +914,7 @@ def rerun_sale_flow(transaction_id: int):
     transaction = dict(transaction)
     flow_result = evaluate_transaction(transaction)
 
-    if flow_result["action"] != "BILLINGO_DRAFT_REQUIRED":
+    if flow_result["action"] != "SALES_READY":
         return RedirectResponse(
             url=f"/transactions/{transaction_id}?approval_status=not_ready",
             status_code=303,
@@ -1023,6 +1067,7 @@ def approve_purchase_flow(transaction_id: int):
         status_code=303,
     )
 
+
 @app.get("/payment-batches", response_class=HTMLResponse)
 def payment_batches(request: Request):
     init_database()
@@ -1112,4 +1157,63 @@ def payment_batch_details(request: Request, batch_id: int):
             "items": items,
             "active_page": "payment_batches",
         },
+    )
+
+
+@app.post("/payment-batches/create-from-transactions")
+async def create_payment_batch_from_transactions(request: Request):
+    init_database()
+
+    form = await request.form()
+    transaction_ids = [
+        int(value)
+        for value in form.getlist("transaction_ids")
+        if str(value).isdigit()
+    ]
+
+    if not transaction_ids:
+        return RedirectResponse(
+            url="/?payment_batch_status=no_selection",
+            status_code=303,
+        )
+
+    ready_transaction_ids = []
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        for transaction_id in transaction_ids:
+            cur.execute("""
+                SELECT *
+                FROM finance_transactions
+                WHERE id = ?
+            """, (transaction_id,))
+            row = cur.fetchone()
+
+            if row is None:
+                continue
+
+            transaction = dict(row)
+            flow_result = evaluate_transaction(transaction)
+
+            if flow_result["action"] == "PURCHASE_PAYMENT_READY":
+                ready_transaction_ids.append(transaction_id)
+
+    if not ready_transaction_ids:
+        return RedirectResponse(
+            url="/?payment_batch_status=no_ready_items",
+            status_code=303,
+        )
+
+    result = PurchaseBatchExecutor().run(transaction_ids)
+
+    if not result.get("payment_batch_id"):
+        return RedirectResponse(
+            url=f"/?payment_batch_status={result['status']}",
+            status_code=303,
+        )
+
+    return RedirectResponse(
+        url=f"/payment-batches/{result['payment_batch_id']}",
+        status_code=303,
     )

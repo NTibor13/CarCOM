@@ -130,73 +130,222 @@
 
                 <button type="submit">Szűrés</button>
             </form>
-
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                    <tr>
-                        <th>Google sor</th>
-                        <th>Külső ID</th>
-                        <th>Dátum</th>
-                        <th>Típus</th>
-                        <th>Autó</th>
-                        <th>Ügyfél</th>
-                        <th>Bruttó</th>
-                        <th>ÁFA</th>
-                        <th>Nettó</th>
-                        <th>Számla státusz</th>
-                        <th>Fizetés státusz</th>
-                        <th>Validáció</th>
-                        <th>Flow</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {% for row in rows %}
-                    <tr class="row-status-{{ row.normalized_status|lower }}">
-                        <td>{{ row.source_row_number }}</td>
-                        <td>{{ row.external_id or "" }}</td>
-                        <td>{{ row.transaction_date or "" }}</td>
-                        <td><span class="badge">{{ row.transaction_type | format_transaction_type }}</span></td>
-                        <td>
-                            <a class="table-link" href="/transactions/{{ row.id }}">
-                                {{ row.car_name or "Részletek" }}
-                            </a>
-                        </td>
-                        <td>{{ row.partner_name or "" }}</td>
-                        <td class="number">{{ row.gross_amount_huf | format_huf }}</td>
-                        <td>{{ row.vat_rate | format_vat }}</td>
-                        <td class="number">{{ row.net_amount_huf | format_huf }}</td>
-                        <td>{{ row.invoice_status or "" }}</td>
-                        <td>{{ row.payment_status or "" }}</td>
-                        <td><span
-                                class="status status-{{ row.normalized_status|lower }}">{{ row.normalized_status }}</span>
-                        </td>
-                        <td>
-                            {% if row.flow_action == "SALES_READY" %}
-                            <span class="flow-badge flow-badge-sale">Kiszámlázható</span>
-                            {% elif row.flow_action == "PURCHASE_PAYMENT_READY" %}
-                            <span class="flow-badge flow-badge-purchase">Kifizethető</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="pagination">
-                {% if page > 1 %}
-                <a href="/?page={{ page - 1 }}&search={{ search }}&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}&transaction_type={{ transaction_type }}&normalized_status={{ normalized_status }}">Előző</a>
-                {% endif %}
-
-                <span>{{ page }} / {{ total_pages }}</span>
-
-                {% if page < total_pages %}
-                <a href="/?page={{ page + 1 }}&search={{ search }}&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}&transaction_type={{ transaction_type }}&normalized_status={{ normalized_status }}">Következő</a>
-                {% endif %}
-            </div>
         </section>
+
+        <form method="post" action="/payment-batches/create-from-transactions" id="purchase-batch-form">
+            <section class="panel">
+                <div class="section-header">
+                    <div>
+                        <h2>Vásárlások</h2>
+                        <p>Vételi tranzakciók és magánszemélytől történő vásárlások.</p>
+                    </div>
+
+                    <div class="header-actions">
+                        <button class="secondary-button" type="button" onclick="clearSelection('purchase-batch-form')">
+                            Kijelölés törlése
+                        </button>
+
+                        <button class="primary-button" type="submit">
+                            Kijelölt vásárlások kötegelése
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>Kijelölés</th>
+                            <th>Google sor</th>
+                            <th>Külső ID</th>
+                            <th>Dátum</th>
+                            <th>Típus</th>
+                            <th>Autó</th>
+                            <th>Ügyfél</th>
+                            <th>Bruttó</th>
+                            <th>ÁFA</th>
+                            <th>Nettó</th>
+                            <th>Fizetés státusz</th>
+                            <th>Validáció</th>
+                            <th>Flow</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for row in purchase_rows %}
+                        <tr class="row-status-{{ row.normalized_status|lower }}">
+                            <td>
+                                {% if row.flow_action == "PURCHASE_PAYMENT_READY" %}
+                                <input
+                                        type="checkbox"
+                                        name="transaction_ids"
+                                        value="{{ row.id }}"
+                                >
+                                {% endif %}
+                            </td>
+                            <td>{{ row.source_row_number }}</td>
+                            <td>{{ row.external_id or "" }}</td>
+                            <td>{{ row.transaction_date or "" }}</td>
+                            <td><span class="badge">{{ row.transaction_type | format_transaction_type }}</span></td>
+                            <td>
+                                <a class="table-link" href="/transactions/{{ row.id }}">
+                                    {{ row.car_name or "Részletek" }}
+                                </a>
+                            </td>
+                            <td>{{ row.partner_name or "" }}</td>
+                            <td class="number">{{ row.gross_amount_huf | format_huf }}</td>
+                            <td>{{ row.vat_rate | format_vat }}</td>
+                            <td class="number">{{ row.net_amount_huf | format_huf }}</td>
+                            <td>{{ row.payment_status or "" }}</td>
+                            <td>
+                                <span class="status status-{{ row.normalized_status|lower }}">
+                                    {{ row.normalized_status }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if row.flow_action == "PURCHASE_PAYMENT_READY" %}
+                                <span class="flow-badge flow-badge-purchase">Kifizethető</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="13" class="empty-state">
+                                Nincs vásárlási tranzakció.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                    <div class="pagination">
+                        {% if purchase_page > 1 %}
+                        <a href="/?purchase_page={{ purchase_page - 1 }}&sales_page={{ sales_page }}&search={{ search }}&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}&transaction_type={{ transaction_type }}&normalized_status={{ normalized_status }}">
+                            Előző
+                        </a>
+                        {% endif %}
+
+                        <span>Vásárlások: {{ purchase_page }} / {{ purchase_total_pages }}</span>
+
+                        {% if purchase_page < purchase_total_pages %}
+                        <a href="/?purchase_page={{ purchase_page + 1 }}&sales_page={{ sales_page }}&search={{ search }}&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}&transaction_type={{ transaction_type }}&normalized_status={{ normalized_status }}">
+                            Következő
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </section>
+        </form>
+
+        <form id="sales-selection-form">
+            <section class="panel">
+                <div class="section-header">
+                    <div>
+                        <h2>Eladások</h2>
+                        <p>Eladási tranzakciók és 90 napos készletes eladások.</p>
+                    </div>
+
+                    <div class="header-actions">
+                        <button class="secondary-button" type="button" onclick="clearSelection('sales-selection-form')">
+                            Kijelölés törlése
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>Kijelölés</th>
+                            <th>Google sor</th>
+                            <th>Külső ID</th>
+                            <th>Dátum</th>
+                            <th>Típus</th>
+                            <th>Autó</th>
+                            <th>Ügyfél</th>
+                            <th>Bruttó</th>
+                            <th>ÁFA</th>
+                            <th>Nettó</th>
+                            <th>Számla státusz</th>
+                            <th>Validáció</th>
+                            <th>Flow</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for row in sales_rows %}
+                        <tr class="row-status-{{ row.normalized_status|lower }}">
+                            <td>
+                                <input
+                                        type="checkbox"
+                                        name="sales_transaction_ids"
+                                        value="{{ row.id }}"
+                                >
+                            </td>
+                            <td>{{ row.source_row_number }}</td>
+                            <td>{{ row.external_id or "" }}</td>
+                            <td>{{ row.transaction_date or "" }}</td>
+                            <td><span class="badge">{{ row.transaction_type | format_transaction_type }}</span></td>
+                            <td>
+                                <a class="table-link" href="/transactions/{{ row.id }}">
+                                    {{ row.car_name or "Részletek" }}
+                                </a>
+                            </td>
+                            <td>{{ row.partner_name or "" }}</td>
+                            <td class="number">{{ row.gross_amount_huf | format_huf }}</td>
+                            <td>{{ row.vat_rate | format_vat }}</td>
+                            <td class="number">{{ row.net_amount_huf | format_huf }}</td>
+                            <td>{{ row.invoice_status or "" }}</td>
+                            <td>
+                                <span class="status status-{{ row.normalized_status|lower }}">
+                                    {{ row.normalized_status }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if row.flow_action == "SALES_READY" %}
+                                <span class="flow-badge flow-badge-sale">Kiszámlázható</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="13" class="empty-state">
+                                Nincs eladási tranzakció.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                    <div class="pagination">
+                        {% if purchase_page > 1 %}
+                        <a href="/?purchase_page={{ purchase_page - 1 }}&sales_page={{ sales_page }}&search={{ search }}&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}&transaction_type={{ transaction_type }}&normalized_status={{ normalized_status }}">
+                            Előző
+                        </a>
+                        {% endif %}
+
+                        <span>Vásárlások: {{ purchase_page }} / {{ purchase_total_pages }}</span>
+
+                        {% if purchase_page < purchase_total_pages %}
+                        <a href="/?purchase_page={{ purchase_page + 1 }}&sales_page={{ sales_page }}&search={{ search }}&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}&transaction_type={{ transaction_type }}&normalized_status={{ normalized_status }}">
+                            Következő
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </section>
+        </form>
+
     </main>
 </div>
+
+<script>
+    function clearSelection(formId) {
+        const form = document.getElementById(formId);
+        if (!form) {
+            return;
+        }
+
+        form.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+            checkbox.checked = false;
+        });
+    }
+</script>
 </body>
 </html>

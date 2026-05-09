@@ -1,5 +1,5 @@
 def is_sale_invoice_ready(tx: dict) -> bool:
-    if tx.get("transaction_type") != "SALE":
+    if tx.get("transaction_type") not in ("SALE", "SALE_STOCK_90_DAYS"):
         return False
 
     if tx.get("normalized_status") != "VALID":

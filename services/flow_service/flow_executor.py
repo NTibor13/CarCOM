@@ -18,20 +18,29 @@ class FlowExecutor:
             force_new_run=force_new_run,
         )
 
-    def run_purchase_flow(self, transaction_id: int, force_new_run: bool = False) -> dict:
+    def run_purchase_flow(
+            self,
+            transaction_id: int,
+            force_new_run: bool = False,
+            payment_batch_id: int | None = None,
+    ) -> dict:
         return self._run_flow(
             transaction_id=transaction_id,
             flow_type="PURCHASE",
             steps=PURCHASE_FLOW_STEPS,
             force_new_run=force_new_run,
+            extra_context={
+                "payment_batch_id": payment_batch_id,
+            } if payment_batch_id else None,
         )
 
     def _run_flow(
-        self,
-        transaction_id: int,
-        flow_type: str,
-        steps: list[dict],
-        force_new_run: bool = False,
+            self,
+            transaction_id: int,
+            flow_type: str,
+            steps: list[dict],
+            force_new_run: bool = False,
+            extra_context: dict | None = None,
     ) -> dict:
         if force_new_run:
             flow_run = self.repository.create_flow_run(
@@ -76,6 +85,9 @@ class FlowExecutor:
                     "step_name": step_name,
                 }
 
+                if extra_context:
+                    context.update(extra_context)
+
                 self.repository.start_step(
                     flow_run_id=flow_run_id,
                     step_name=step_name,
@@ -92,20 +104,10 @@ class FlowExecutor:
                         output_data=result,
                     )
 
-                    self.repository.mark_flow_skipped(
-                        flow_run_id=flow_run_id,
-                        reason=result.get("reason"),
-                    )
-
                     executed_steps.append(step_name)
+                    skipped_steps.append(step_name)
 
-                    return {
-                        "flow_run_id": flow_run_id,
-                        "status": "SKIPPED",
-                        "reason": result.get("reason"),
-                        "executed_steps": executed_steps,
-                        "skipped_steps": skipped_steps,
-                    }
+                    continue
 
                 self.repository.mark_step_success(
                     flow_run_id=flow_run_id,

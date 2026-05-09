@@ -5,7 +5,12 @@ from services.sync_service.google_sheets_client import GoogleSheetsClient
 
 def create_payment_batch_item_step(context: dict) -> dict:
     transaction_id = int(context["transaction_id"])
-    return PaymentBatchRepository().create_or_get_item_for_transaction(transaction_id)
+    batch_id = context.get("payment_batch_id")
+
+    return PaymentBatchRepository().create_or_get_item_for_transaction(
+        transaction_id=transaction_id,
+        batch_id=batch_id,
+    )
 
 
 def update_sheet_purchase_payment_status_step(context: dict) -> dict:

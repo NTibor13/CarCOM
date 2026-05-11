@@ -388,6 +388,7 @@ def run_manual_sync(request: Request):
                 "request": request,
                 "active_page": "sync_runs",
                 "message": str(exc),
+                "error_message": str(exc),
             },
             status_code=401,
         )
@@ -935,8 +936,12 @@ def rerun_sale_flow(transaction_id: int):
 def start_google_auth():
     try:
         load_oauth_credentials(interactive=True)
-    except GoogleAuthenticationRequiredError:
-        return RedirectResponse(url="/settings?google_auth=failed", status_code=303)
+    except Exception as exc:
+        print(f"Google OAuth start failed: {exc}")
+        return RedirectResponse(
+            url=f"/settings?google_auth=failed&google_auth_message={str(exc)}",
+            status_code=303,
+        )
 
     return RedirectResponse(url="/settings?google_auth=success", status_code=303)
 
@@ -997,15 +1002,35 @@ def get_mbh_account_info_status_for_ui():
             get_mbh_account_info_status,
         )
 
-        return get_mbh_account_info_status()
+        status = get_mbh_account_info_status() or {}
 
     except Exception as exc:
-        return {
+        status = {
             "connected": False,
             "needs_reauth": True,
             "api_type": "account_info",
             "message": f"MBH Account Info státusz nem olvasható: {str(exc)}",
         }
+
+    status.setdefault("connected", False)
+    status.setdefault("needs_reauth", True)
+    status.setdefault("api_type", "account_info")
+    status.setdefault("message", "Az MBH Account Info kapcsolat jelenleg nincs aktív használatban.")
+
+    if status.get("connected"):
+        status.setdefault("ui_status", "success")
+        status.setdefault("ui_label", "Kapcsolódva")
+        status.setdefault("ui_description", "Az MBH Account Info kapcsolat aktív.")
+    elif status.get("needs_reauth"):
+        status.setdefault("ui_status", "warning")
+        status.setdefault("ui_label", "Újrahitelesítés szükséges")
+        status.setdefault("ui_description", status.get("message"))
+    else:
+        status.setdefault("ui_status", "inactive")
+        status.setdefault("ui_label", "Nincs aktív kapcsolat")
+        status.setdefault("ui_description", status.get("message"))
+
+    return status
 
 
 @app.post("/settings/mbh/account-info/create-consent-ui")

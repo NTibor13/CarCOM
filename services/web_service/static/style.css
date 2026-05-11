@@ -155,7 +155,7 @@ body {
 table {
     width: 100%;
     border-collapse: collapse;
-    min-width: 1280px;
+    border-collapse: collapse;
 }
 
 th {

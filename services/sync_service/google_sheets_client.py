@@ -1,3 +1,4 @@
+import json
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
@@ -234,9 +235,73 @@ class GoogleSheetsClient:
             header_name: str,
             file_id: str,
     ) -> None:
+        file_id = self._normalize_drive_file_id(file_id)
+        drive_file_url = f"https://drive.google.com/file/d/{file_id}/view"
         sheet_id = self._get_sheet_id()
         column_index = self._get_column_index_by_header(header_name)
 
+        cell_state = self._get_cell_chip_state(
+            row_number=row_number,
+            column_index=column_index,
+        )
+
+        existing_value = cell_state["text"]
+        existing_chip_runs = cell_state["chip_runs"]
+
+        if existing_value:
+            new_value = f"{existing_value} @"
+            new_chip_start_index = len(existing_value) + 1
+        else:
+            new_value = "@"
+            new_chip_start_index = 0
+
+        chip_runs = []
+
+        for chip_run in existing_chip_runs:
+            start_index = chip_run.get("startIndex", 0)
+
+            uri = (
+                chip_run
+                .get("chip", {})
+                .get("richLinkProperties", {})
+                .get("uri")
+            )
+
+            if not uri:
+                continue
+
+            try:
+                old_file_id = self._normalize_drive_file_id(uri)
+            except Exception:
+                continue
+
+            if not old_file_id or old_file_id == "None":
+                continue
+
+            chip_runs.append(
+                {
+                    "startIndex": start_index,
+                    "chip": {
+                        "richLinkProperties": {
+                            "uri": f"https://drive.google.com/file/d/{old_file_id}/view"
+                        }
+                    },
+                }
+            )
+
+        chip_runs.append(
+            {
+                "startIndex": new_chip_start_index,
+                "chip": {
+                    "richLinkProperties": {
+                        "uri": drive_file_url
+                    }
+                },
+            }
+        )
+
+        print("DEBUG Drive chip file_id:", file_id)
+        print("DEBUG Drive chip url:", drive_file_url)
         self.service.spreadsheets().batchUpdate(
             spreadsheetId=settings.google_sheet_id,
             body={
@@ -255,18 +320,9 @@ class GoogleSheetsClient:
                                     "values": [
                                         {
                                             "userEnteredValue": {
-                                                "stringValue": "@"
+                                                "stringValue": new_value
                                             },
-                                            "chipRuns": [
-                                                {
-                                                    "startIndex": 0,
-                                                    "chip": {
-                                                        "richLinkProperties": {
-                                                            "uri": f"https://drive.google.com/file/d/{file_id}/view"
-                                                        }
-                                                    },
-                                                }
-                                            ],
+                                            "chipRuns": chip_runs,
                                         }
                                     ]
                                 }
@@ -277,6 +333,31 @@ class GoogleSheetsClient:
                 ]
             },
         ).execute()
+
+    def _get_cell_formatted_value(
+            self,
+            row_number: int,
+            column_index: int,
+    ) -> str:
+        col_letter = self._column_index_to_letter(column_index + 1)
+        cell_range = f"'{settings.google_worksheet_name}'!{col_letter}{row_number}"
+
+        result = (
+            self.service.spreadsheets()
+            .values()
+            .get(
+                spreadsheetId=settings.google_sheet_id,
+                range=cell_range,
+            )
+            .execute()
+        )
+
+        values = result.get("values", [])
+
+        if not values or not values[0]:
+            return ""
+
+        return str(values[0][0]).strip()
 
     def _get_sheet_id(self) -> int:
         spreadsheet = (
@@ -322,3 +403,164 @@ class GoogleSheetsClient:
 
     def _load_oauth_credentials(self):
         return load_oauth_credentials(interactive=False)
+
+    def _normalize_drive_file_id(self, file_id_or_url: str) -> str:
+        value = str(file_id_or_url).strip()
+
+        if "/file/d/" in value:
+            return value.split("/file/d/")[1].split("/")[0]
+
+        if "id=" in value:
+            return value.split("id=")[1].split("&")[0]
+
+        return value
+
+    def _get_cell_chip_state(
+            self,
+            row_number: int,
+            column_index: int,
+    ) -> dict:
+        sheet_id = self._get_sheet_id()
+
+        result = (
+            self.service.spreadsheets()
+            .get(
+                spreadsheetId=settings.google_sheet_id,
+                ranges=[],
+                includeGridData=True,
+            )
+            .execute()
+        )
+
+        for sheet in result.get("sheets", []):
+            if sheet.get("properties", {}).get("sheetId") != sheet_id:
+                continue
+
+            data = sheet.get("data", [])
+            if not data:
+                return {"text": "", "chip_runs": []}
+
+        # pontosabb és gyorsabb range-alapú lekérés
+        col_letter = self._column_index_to_letter(column_index + 1)
+        cell_range = f"'{settings.google_worksheet_name}'!{col_letter}{row_number}"
+
+        result = (
+            self.service.spreadsheets()
+            .get(
+                spreadsheetId=settings.google_sheet_id,
+                ranges=[cell_range],
+                includeGridData=True,
+            )
+            .execute()
+        )
+
+        sheets = result.get("sheets", [])
+        if not sheets:
+            return {"text": "", "chip_runs": []}
+
+        data = sheets[0].get("data", [])
+        if not data:
+            return {"text": "", "chip_runs": []}
+
+        row_data = data[0].get("rowData", [])
+        if not row_data:
+            return {"text": "", "chip_runs": []}
+
+        values = row_data[0].get("values", [])
+        if not values:
+            return {"text": "", "chip_runs": []}
+
+        cell = values[0]
+
+        text = (
+                cell.get("userEnteredValue", {}).get("stringValue")
+                or cell.get("formattedValue")
+                or ""
+        )
+
+        chip_runs = cell.get("chipRuns", []) or []
+
+        print("DEBUG existing cell raw:")
+        print(json.dumps(cell, indent=2, ensure_ascii=False))
+
+        print("DEBUG existing chipRuns:")
+        print(json.dumps(chip_runs, indent=2, ensure_ascii=False))
+
+        return {
+            "text": text,
+            "chip_runs": chip_runs,
+        }
+
+    def update_drive_file_chips(
+            self,
+            row_number: int,
+            header_name: str,
+            file_ids: list[str],
+    ) -> None:
+        sheet_id = self._get_sheet_id()
+        column_index = self._get_column_index_by_header(header_name)
+
+        clean_file_ids = []
+        for file_id in file_ids:
+            normalized = self._normalize_drive_file_id(file_id)
+            if normalized and normalized != "None" and normalized not in clean_file_ids:
+                clean_file_ids.append(normalized)
+
+        if not clean_file_ids:
+            raise RuntimeError("No valid Drive file IDs provided for chip update.")
+
+        text_parts = ["@" for _ in clean_file_ids]
+        new_value = "\n".join(text_parts)
+
+        chip_runs = []
+        current_index = 0
+
+        for file_id in clean_file_ids:
+            chip_runs.append(
+                {
+                    "startIndex": current_index,
+                    "chip": {
+                        "richLinkProperties": {
+                            "uri": f"https://drive.google.com/file/d/{file_id}/view"
+                        }
+                    },
+                }
+            )
+
+            current_index += 2  # "@" + "\n"
+
+        print("DEBUG clean_file_ids:", clean_file_ids)
+        print("DEBUG new_value:", repr(new_value))
+        print("DEBUG chip_runs:", json.dumps(chip_runs, indent=2, ensure_ascii=False))
+
+        self.service.spreadsheets().batchUpdate(
+            spreadsheetId=settings.google_sheet_id,
+            body={
+                "requests": [
+                    {
+                        "updateCells": {
+                            "range": {
+                                "sheetId": sheet_id,
+                                "startRowIndex": row_number - 1,
+                                "endRowIndex": row_number,
+                                "startColumnIndex": column_index,
+                                "endColumnIndex": column_index + 1,
+                            },
+                            "rows": [
+                                {
+                                    "values": [
+                                        {
+                                            "userEnteredValue": {
+                                                "stringValue": new_value
+                                            },
+                                            "chipRuns": chip_runs,
+                                        }
+                                    ]
+                                }
+                            ],
+                            "fields": "userEnteredValue,chipRuns",
+                        }
+                    }
+                ]
+            },
+        ).execute()

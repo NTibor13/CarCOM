@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="hu">
+<head>
+    <meta charset="utf-8">
+    <title>CarCOM - Szinkron hiba</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="app-shell">
+    <aside class="sidebar">
+        {% include "partials/nav.html" %}
+    </aside>
+
+    <main class="main">
+        <header class="topbar">
+            <div>
+                <h1>Szinkron hiba</h1>
+                <p>A szinkron futtatása nem sikerült.</p>
+            </div>
+
+            <a class="secondary-button" href="/settings">
+                Beállítások megnyitása
+            </a>
+        </header>
+
+        <section class="panel">
+            <div class="section-header">
+                <div>
+                    <h2>Google hitelesítés szükséges</h2>
+                    <p>{{ error_message }}</p>
+                </div>
+            </div>
+
+            <a class="primary-button" href="/settings">
+                Google hitelesítés indítása
+            </a>
+        </section>
+    </main>
+</div>
+</body>
+</html>

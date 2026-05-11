@@ -257,15 +257,6 @@ def upload_to_drive_step(context: dict) -> dict:
     transaction_id = int(context["transaction_id"])
     transaction = _get_transaction(transaction_id)
 
-    existing_document = _get_existing_invoice_document(transaction_id)
-    if existing_document:
-        return {
-            "status": "already_uploaded",
-            "document_id": existing_document["id"],
-            "drive_link": existing_document["file_url"],
-            "file_name": existing_document["file_name"],
-        }
-
     active_link = get_active_invoice_link(transaction_id)
     if not active_link:
         raise RuntimeError(
@@ -273,6 +264,21 @@ def upload_to_drive_step(context: dict) -> dict:
         )
 
     billingo_document_id = int(active_link["billingo_document_id"])
+
+    existing_billingo_upload = _get_existing_billingo_uploaded_document(
+        transaction_id=transaction_id,
+        billingo_document_id=billingo_document_id,
+    )
+
+    if existing_billingo_upload:
+        return {
+            "status": "already_uploaded",
+            "document_id": existing_billingo_upload["id"],
+            "billingo_document_id": billingo_document_id,
+            "drive_file_id": existing_billingo_upload["raw_value"],
+            "drive_link": existing_billingo_upload["file_url"],
+            "file_name": existing_billingo_upload["file_name"],
+        }
 
     file_name = _build_invoice_file_name(
         transaction=transaction,
@@ -297,7 +303,8 @@ def upload_to_drive_step(context: dict) -> dict:
         transaction_id=transaction_id,
         file_name=file_name,
         file_url=drive_file["webViewLink"],
-        raw_value=drive_file["id"],
+        raw_value=f"billingo_document_id:{billingo_document_id};drive_file_id:{drive_file['id']}",
+        source_column="Billingo",
     )
 
     return {
@@ -308,6 +315,34 @@ def upload_to_drive_step(context: dict) -> dict:
         "drive_link": drive_file["webViewLink"],
         "file_name": file_name,
     }
+
+def _get_existing_billingo_uploaded_document(
+    transaction_id: int,
+    billingo_document_id: int,
+) -> dict | None:
+    expected_raw_value_prefix = f"billingo_document_id:{billingo_document_id};"
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT *
+            FROM finance_transaction_documents
+            WHERE transaction_id = ?
+              AND document_type = 'INVOICE'
+              AND source_column = 'Billingo'
+              AND raw_value LIKE ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (
+                transaction_id,
+                expected_raw_value_prefix + "%",
+            ),
+        )
+        row = cur.fetchone()
+
+    return dict(row) if row else None
 
 def _get_existing_invoice_document(transaction_id: int) -> dict | None:
     with get_connection() as conn:
@@ -338,6 +373,7 @@ def _create_invoice_document(
     file_name: str,
     file_url: str,
     raw_value: str,
+    source_column: str = "Számla link",
 ) -> int:
     with get_connection() as conn:
         cur = conn.cursor()
@@ -357,7 +393,7 @@ def _create_invoice_document(
             (
                 transaction_id,
                 "INVOICE",
-                "Számla link",
+                source_column,
                 file_name,
                 file_url,
                 raw_value,
@@ -448,17 +484,36 @@ def update_sheet_link_step(context: dict) -> dict:
     drive_link = uploaded_invoice.get("drive_link")
     drive_file_id = uploaded_invoice.get("drive_file_id")
 
+    if not drive_file_id and drive_link:
+        drive_file_id = drive_link.split("/file/d/")[1].split("/")[0]
+
     if not drive_link:
         raise Exception(
-            f"UPLOAD_TO_DRIVE output does not contain drive_link for transaction: {transaction_id}"
+            f"UPLOAD_TO_DRIVE output does not contain drive_link for transaction: {transaction_id}. "
+            f"UPLOAD_TO_DRIVE output: {uploaded_invoice}"
+        )
+
+    if not drive_file_id:
+        raise Exception(
+            f"UPLOAD_TO_DRIVE output does not contain drive_file_id for transaction: {transaction_id}. "
+            f"UPLOAD_TO_DRIVE output: {uploaded_invoice}"
         )
 
     row_number = int(transaction["source_row_number"])
 
-    GoogleSheetsClient().update_drive_file_chip(
+    existing_file_ids = _get_existing_document_file_ids(transaction_id)
+
+    all_file_ids = existing_file_ids + [drive_file_id]
+
+    print("DEBUG uploaded_invoice:", uploaded_invoice)
+    print("DEBUG existing_file_ids:", existing_file_ids)
+    print("DEBUG drive_file_id:", drive_file_id)
+    print("DEBUG all_file_ids:", all_file_ids)
+
+    GoogleSheetsClient().update_drive_file_chips(
         row_number=row_number,
         header_name="Számla link",
-        file_id=drive_file_id,
+        file_ids=all_file_ids,
     )
 
     return {
@@ -492,3 +547,40 @@ def _get_upload_to_drive_output(flow_run_id: int) -> dict | None:
         return None
 
     return json.loads(row["output_json"])
+
+def _get_existing_document_file_ids(transaction_id: int) -> list[str]:
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT file_url
+            FROM finance_transaction_documents
+            WHERE transaction_id = ?
+              AND source_column = ?
+              AND file_url IS NOT NULL
+              AND TRIM(file_url) != ''
+            ORDER BY id ASC
+            """,
+            (
+                transaction_id,
+                "Számla link",
+            ),
+        )
+        rows = cur.fetchall()
+
+    file_ids = []
+
+    for row in rows:
+        file_url = row["file_url"]
+
+        if "/file/d/" in file_url:
+            file_id = file_url.split("/file/d/")[1].split("/")[0]
+        elif "id=" in file_url:
+            file_id = file_url.split("id=")[1].split("&")[0]
+        else:
+            continue
+
+        if file_id and file_id not in file_ids:
+            file_ids.append(file_id)
+
+    return file_ids

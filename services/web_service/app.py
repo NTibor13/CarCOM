@@ -894,7 +894,7 @@ def get_google_oauth_status():
 
 
 @app.post("/transactions/{transaction_id}/rerun-flow")
-def rerun_sale_flow(transaction_id: int):
+def rerun_transaction_flow(transaction_id: int):
     init_database()
 
     with get_connection() as conn:
@@ -915,16 +915,25 @@ def rerun_sale_flow(transaction_id: int):
     transaction = dict(transaction)
     flow_result = evaluate_transaction(transaction)
 
-    if flow_result["action"] != "SALES_READY":
+    executor = FlowExecutor()
+
+    if flow_result["action"] == "SALES_READY":
+        result = executor.run_sale_flow(
+            transaction_id=transaction_id,
+            force_new_run=True,
+        )
+
+    elif flow_result["action"] == "PURCHASE_PAYMENT_READY":
+        result = executor.run_purchase_flow(
+            transaction_id=transaction_id,
+            force_new_run=True,
+        )
+
+    else:
         return RedirectResponse(
             url=f"/transactions/{transaction_id}?approval_status=not_ready",
             status_code=303,
         )
-
-    result = FlowExecutor().run_sale_flow(
-        transaction_id=transaction_id,
-        force_new_run=True,
-    )
 
     return RedirectResponse(
         url=f"/transactions/{transaction_id}?flow_status={result['status']}",

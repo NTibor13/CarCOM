@@ -55,7 +55,7 @@
                 <div class="flow-icon">✓</div>
 
                 <div class="flow-text">
-                    <p class="flow-kicker">Billingo folyamat</p>
+                    <p class="flow-kicker">Eladási folyamat</p>
                     <h2>Ez a tranzakció kiszámlázható</h2>
                     <p>
                         Az adatok megfelelnek a számladraft előkészítéséhez szükséges feltételeknek.
@@ -132,24 +132,54 @@
         {% endif %}
 
         {% if transaction.flow_action == "PURCHASE_PAYMENT_READY" %}
+        <section class="flow-block">
+            <div class="flow-content">
+                <div class="flow-icon">✓</div>
 
-        <section class="flow-card flow-card-ready">
-            <div class="flow-card-header">
-                <div>
-                    <div class="flow-card-label">Vásárlási folyamat</div>
-                    <h2>Ez a tranzakció kifizetésre előkészíthető</h2>
+                <div class="flow-text">
+                    <p class="flow-kicker">Vásárlási folyamat</p>
+                    <h2>Ez a tranzakció kifizethető</h2>
+                    <p>
+                        Az adatok megfelelnek a banki köteg léterhozás feltételeinek.
+                    </p>
                 </div>
             </div>
 
-            <p>
-                A rendszer MBH API hívás nélkül számlaköteg tételt fog létrehozni.
-            </p>
-
-            <form method="post" action="/transactions/{{ transaction.id }}/approve-purchase">
-                <button class="btn btn-primary" type="submit">
-                    Vásárlási folyamat jóváhagyása és indítása
+            <div class="flow-side">
+                <span class="flow-badge">Kifizethető</span>
+                {% if transaction.flow_action == "PURCHASE_PAYMENT_READY" %}
+                <div class="action-panel">
+                    <form method="post" action="/transactions/{{ transaction.id }}/approve-purchase">
+                        <button class="primary-button" type="submit">
+                            Vásárlási folyamat jóváhagyása és indítása
+                        </button>
+                    </form>
+                </div>
+                {% elif latest_flow_run.status == "SUCCESS" %}
+                <button type="button" class="floating-button" disabled>
+                    Folyamat kész
                 </button>
-            </form>
+                {% elif latest_flow_run.status == "SKIPPED" %}
+                <button type="button" class="floating-button" disabled>
+                    Folyamat kihagyva
+                </button>
+                {% else %}
+                <form method="post" action="/transactions/{{ transaction.id }}/approve-purchase">
+                    <button type="submit" class="primary-button">
+                        Folyamat futtatása
+                    </button>
+                </form>
+                {% endif %}
+                {% if latest_flow_run and transaction.flow_action == "PURCHASE_PAYMENT_READY" %}
+                <form method="post" action="/transactions/{{ transaction.id }}/rerun-flow">
+                    <button type="submit" class="secondary-button">
+                        Új folyamat indítása
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+
+
         </section>
 
         {% endif %}

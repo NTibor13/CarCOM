@@ -198,3 +198,63 @@ class PaymentBatchRepository:
             """)
             conn.commit()
             return int(cur.lastrowid)
+
+    def create_new_item_for_transaction(
+            self,
+            transaction_id: int,
+            batch_id: int | None = None,
+    ) -> dict:
+        with get_connection() as conn:
+            cur = conn.cursor()
+
+            cur.execute("""
+                SELECT
+                    id,
+                    partner_name,
+                    bank_account,
+                    gross_amount_huf,
+                    payment_notice
+                FROM finance_transactions
+                WHERE id = ?
+            """, (transaction_id,))
+            tx = cur.fetchone()
+
+            if not tx:
+                raise RuntimeError(f"Transaction not found: {transaction_id}")
+
+            if batch_id is None:
+                cur.execute("""
+                    INSERT INTO payment_batches (status)
+                    VALUES ('OPEN')
+                """)
+                batch_id = int(cur.lastrowid)
+
+            cur.execute("""
+                INSERT INTO payment_batch_items (
+                    batch_id,
+                    transaction_id,
+                    creditor_name,
+                    creditor_bank_account,
+                    amount_huf,
+                    payment_notice,
+                    status
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                batch_id,
+                transaction_id,
+                tx["partner_name"],
+                tx["bank_account"],
+                tx["gross_amount_huf"],
+                tx["payment_notice"],
+                "CREATED",
+            ))
+
+            conn.commit()
+
+            return {
+                "status": "success",
+                "reason": "forced_new_payment_batch_item_created",
+                "payment_batch_id": batch_id,
+                "payment_batch_item_id": int(cur.lastrowid),
+            }

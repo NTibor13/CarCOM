@@ -888,3 +888,33 @@ button:disabled {
     cursor: not-allowed;
     pointer-events: none;
 }
+
+.icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: #eef2ff;
+    color: #1d4ed8;
+    text-decoration: none;
+}
+
+.icon-button:hover {
+    background: #dbeafe;
+}
+
+.icon-button svg {
+    width: 18px;
+    height: 18px;
+}
+
+.icon-button.secondary {
+    background: #f3f4f6;
+    color: #374151;
+}
+
+.icon-button.secondary:hover {
+    background: #e5e7eb;
+}

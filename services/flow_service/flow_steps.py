@@ -9,6 +9,7 @@ from services.flow_service.sales_flow_steps import (
 from services.flow_service.purchase_flow_steps import (
     create_payment_batch_item_step,
     update_sheet_purchase_payment_status_step,
+    create_billingo_spending_step,
 )
 
 SALE_FLOW_STEPS = [
@@ -40,8 +41,12 @@ PURCHASE_FLOW_STEPS = [
         "order": 10,
     },
     {
-        "name": "UPDATE_SHEET_PURCHASE_PAYMENT_STATUS",
+        "name": "CREATE_BILLINGO_SPENDING",
         "order": 20,
+    },
+    {
+        "name": "UPDATE_SHEET_PURCHASE_PAYMENT_STATUS",
+        "order": 30,
     },
 ]
 
@@ -62,5 +67,6 @@ STEP_HANDLERS = {
     "UPDATE_SHEET_STATUS": update_sheet_status_step,
     "UPDATE_SHEET_LINK": update_sheet_link_step,
     "CREATE_PAYMENT_BATCH_ITEM": create_payment_batch_item_step,
+    "CREATE_BILLINGO_SPENDING": create_billingo_spending_step,
     "UPDATE_SHEET_PURCHASE_PAYMENT_STATUS": update_sheet_purchase_payment_status_step,
 }

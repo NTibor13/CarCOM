@@ -59,6 +59,16 @@ class FlowExecutor:
         executed_steps = []
         skipped_steps = []
 
+        flow_context = {
+            "transaction_id": transaction_id,
+            "flow_type": flow_type,
+            "flow_run_id": flow_run_id,
+            "force_new_run": force_new_run,
+        }
+
+        if extra_context:
+            flow_context.update(extra_context)
+
         try:
             for step in steps:
                 step_name = step["name"]
@@ -78,15 +88,8 @@ class FlowExecutor:
                 if handler is None:
                     raise RuntimeError(f"No handler registered for step: {step_name}")
 
-                context = {
-                    "transaction_id": transaction_id,
-                    "flow_type": flow_type,
-                    "flow_run_id": flow_run_id,
-                    "step_name": step_name,
-                }
-
-                if extra_context:
-                    context.update(extra_context)
+                context = dict(flow_context)
+                context["step_name"] = step_name
 
                 self.repository.start_step(
                     flow_run_id=flow_run_id,
@@ -96,6 +99,9 @@ class FlowExecutor:
                 )
 
                 result = handler(context)
+
+                if isinstance(result, dict):
+                    flow_context.update(result)
 
                 if result.get("status") == "skipped":
                     self.repository.mark_step_skipped(

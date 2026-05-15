@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>CarCOM - Kifizetési kötegek</title>
     <link rel="stylesheet" href="/static/style.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
 <div class="app-shell">
@@ -43,24 +44,35 @@
                         <th>Tételek száma</th>
                         <th class="number">Összeg</th>
                         <th>Létrehozva</th>
-                        <th>Megnyitás</th>
+                        <th>Műveletek</th>
                     </tr>
                     </thead>
                     <tbody>
                     {% for batch in batches %}
                     <tr>
-                        <td><span class="badge">#{{ batch.id }}</span></td>
+                        <td><a
+                                    href="/payment-batches/{{ batch.id }}" class="badge">#{{ batch.id }}</a></td>
                         <td><span class="status status-warning">{{ batch.status }}</span></td>
                         <td>{{ batch.item_count }}</td>
                         <td class="number">{{ batch.total_amount_huf | format_huf }}</td>
                         <td>{{ batch.created_at }}</td>
                         <td>
-                            <a class="table-link" href="/payment-batches/{{ batch.id }}">
-                                Megnyitás
+                            <a
+                                    href="/payment-batches/{{ batch.id }}"
+                                    class="icon-button"
+                                    title="Köteg megnyitása"
+                                    aria-label="Köteg megnyitása"
+                            >
+                                <i data-lucide="eye"></i>
                             </a>
                             {% if batch.export_file_path %}
-                            <a href="/payment-batches/{{ batch.id }}/download-export" class="table-link">
-                                XML letöltés
+                            <a
+                                    href="/payment-batches/{{ batch.id }}/download-export"
+                                    class="icon-button"
+                                    title="Köteg letöltése"
+                                    aria-label="Köteg letöltése"
+                            >
+                                <i data-lucide="download"></i>
                             </a>
                             {% endif %}
                         </td>
@@ -78,5 +90,8 @@
         </div>
     </main>
 </div>
+<script>
+    lucide.createIcons();
+</script>
 </body>
 </html>

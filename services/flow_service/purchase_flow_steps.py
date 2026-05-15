@@ -4,17 +4,27 @@ from services.sync_service.google_sheets_client import GoogleSheetsClient
 from services.payment_batch_service.mbh_huf_xml_101_exporter import (
     export_batch_to_mbh_huf_xml_101,
 )
+from services.billingo_service.spending_service import create_spendings_for_batch
 from shared.config.settings import settings
 
 
 def create_payment_batch_item_step(context: dict) -> dict:
     transaction_id = int(context["transaction_id"])
     batch_id = context.get("payment_batch_id")
+    force_new_run = bool(context.get("force_new_run"))
 
-    result = PaymentBatchRepository().create_or_get_item_for_transaction(
-        transaction_id=transaction_id,
-        batch_id=batch_id,
-    )
+    repo = PaymentBatchRepository()
+
+    if force_new_run:
+        result = repo.create_new_item_for_transaction(
+            transaction_id=transaction_id,
+            batch_id=batch_id,
+        )
+    else:
+        result = repo.create_or_get_item_for_transaction(
+            transaction_id=transaction_id,
+            batch_id=batch_id,
+        )
 
     payment_batch_id = (
             result.get("batch_id")
@@ -39,6 +49,7 @@ def create_payment_batch_item_step(context: dict) -> dict:
         debtor_name=settings.company_name,
     )
 
+    result["payment_batch_id"] = int(payment_batch_id)
     result["payment_export"] = export_result
 
     return result
@@ -134,3 +145,26 @@ def _get_batch_id_for_item(payment_batch_item_id: int) -> int:
         raise RuntimeError(f"Payment batch item not found: {payment_batch_item_id}")
 
     return int(row["batch_id"])
+
+def create_billingo_spending_step(context: dict) -> dict:
+    payment_batch_id = context.get("payment_batch_id")
+
+    if not payment_batch_id:
+        return {
+            "status": "skipped",
+            "reason": "missing_payment_batch_id",
+        }
+
+    spending_result = create_spendings_for_batch(
+        int(payment_batch_id),
+        force_new_run=bool(context.get("force_new_run")),
+    )
+
+    if spending_result.get("status") == "partial_failed":
+        raise RuntimeError(f"Billingo spending creation failed: {spending_result}")
+
+    return {
+        "status": spending_result.get("status", "success"),
+        "payment_batch_id": payment_batch_id,
+        "billingo_spending": spending_result,
+    }

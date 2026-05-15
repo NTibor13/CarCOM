@@ -96,7 +96,15 @@ def _to_pretty_xml_bytes(root: ET.Element) -> bytes:
 
 
 def _normalize_bank_account(value: str) -> str:
-    digits = re.sub(r"\D", "", value or "")
+    raw = str(value or "").strip()
+
+    if raw.upper().startswith("IBAN:"):
+        iban = raw.split(":", 1)[1].strip().replace(" ", "")
+        if not iban.upper().startswith("HU"):
+            raise RuntimeError(f"Invalid Hungarian IBAN: {value}")
+        return iban.upper()
+
+    digits = re.sub(r"\D", "", raw)
 
     if len(digits) not in (16, 24):
         raise RuntimeError(f"Invalid Hungarian bank account number: {value}")
@@ -179,7 +187,7 @@ def _mark_batch_exported(batch_id: int, file_name: str, file_path: str) -> None:
             """
             UPDATE payment_batches
             SET
-                status = 'EXPORTED',
+                status = 'XML_DONE',
                 export_format = 'MBH_HUF_XML_101',
                 export_file_name = ?,
                 export_file_path = ?,

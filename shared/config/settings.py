@@ -28,6 +28,9 @@ class Settings:
     sync_interval_seconds: int = int(os.getenv("SYNC_INTERVAL_SECONDS", "300"))
     billingo_invoice_drive_folder_id: str = os.getenv("BILLINGO_INVOICE_DRIVE_FOLDER_ID", "")
 
+    default_payment_account: str = os.getenv("DEFAULT_PAYMENT_ACCOUNT", "")
+    company_name: str = os.getenv("COMPANY_NAME", "")
+
     mbh_account_base_url: str = os.getenv("MBH_ACCOUNT_BASE_URL", "")
     mbh_account_client_id: str = os.getenv("MBH_ACCOUNT_CLIENT_ID", "")
 

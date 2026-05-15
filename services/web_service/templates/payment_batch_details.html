@@ -19,9 +19,18 @@
                 <p>Köteg státusz: {{ batch.status }} · Létrehozva: {{ batch.created_at }}</p>
             </div>
 
-            <a class="secondary-button" href="/payment-batches">
-                Vissza a kötegekhez
-            </a>
+            <div class="action-panel">
+                {% if batch.export_file_path %}
+                <a href="/payment-batches/{{ batch.id }}/download-export" class="primary-button">
+                    XML export letöltése
+                </a>
+                {% endif %}
+
+                <a class="secondary-button" href="/payment-batches">
+                    Vissza a kötegekhez
+                </a>
+            </div>
+
         </div>
 
         <div class="cards">

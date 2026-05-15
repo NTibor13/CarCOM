@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from fastapi import HTTPException
 from fastapi import FastAPI, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -48,15 +48,15 @@ templates.env.filters["format_transaction_type"] = format_transaction_type
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard(
-    request: Request,
-    purchase_page: int = Query(1, ge=1),
-    sales_page: int = Query(1, ge=1),
-    search: str = "",
-    sort_by: str = "source_row_number",
-    sort_dir: str = "desc",
-    transaction_type: str = "",
-    normalized_status: str = "",
-    sync_status: str = "",
+        request: Request,
+        purchase_page: int = Query(1, ge=1),
+        sales_page: int = Query(1, ge=1),
+        search: str = "",
+        sort_by: str = "source_row_number",
+        sort_dir: str = "desc",
+        transaction_type: str = "",
+        normalized_status: str = "",
+        sync_status: str = "",
 ):
     init_database()
 
@@ -1105,6 +1105,10 @@ def payment_batches(request: Request):
                 pb.status,
                 pb.created_at,
                 pb.updated_at,
+                pb.export_format,
+                pb.export_file_name,
+                pb.export_file_path,
+                pb.exported_at,
                 COUNT(pbi.id) AS item_count,
                 COALESCE(SUM(pbi.amount_huf), 0) AS total_amount_huf
             FROM payment_batches pb
@@ -1137,6 +1141,10 @@ def payment_batch_details(request: Request, batch_id: int):
                 pb.status,
                 pb.created_at,
                 pb.updated_at,
+                pb.export_format,
+                pb.export_file_name,
+                pb.export_file_path,
+                pb.exported_at,
                 COUNT(pbi.id) AS item_count,
                 COALESCE(SUM(pbi.amount_huf), 0) AS total_amount_huf
             FROM payment_batches pb
@@ -1241,4 +1249,43 @@ async def create_payment_batch_from_transactions(request: Request):
     return RedirectResponse(
         url=f"/payment-batches/{result['payment_batch_id']}",
         status_code=303,
+    )
+
+
+@app.get("/payment-batches/{batch_id}/download-export")
+def download_payment_batch_export(batch_id: int):
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT export_file_path, export_file_name, status
+            FROM payment_batches
+            WHERE id = ?
+            """,
+            (batch_id,),
+        )
+        row = cur.fetchone()
+
+        if row is None:
+            raise HTTPException(status_code=404, detail="Payment batch not found")
+
+        if not row["export_file_path"]:
+            raise HTTPException(status_code=404, detail="Payment export not found")
+
+        if row["status"] == "XML_DONE":
+            cur.execute(
+                """
+                UPDATE payment_batches
+                SET status = 'EXPORTED',
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (batch_id,),
+            )
+            conn.commit()
+
+    return FileResponse(
+        path=row["export_file_path"],
+        filename=row["export_file_name"],
+        media_type="application/xml",
     )

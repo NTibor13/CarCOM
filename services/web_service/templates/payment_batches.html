@@ -58,6 +58,11 @@
                             <a class="table-link" href="/payment-batches/{{ batch.id }}">
                                 Megnyitás
                             </a>
+                            {% if batch.export_file_path %}
+                            <a href="/payment-batches/{{ batch.id }}/download-export" class="table-link">
+                                XML letöltés
+                            </a>
+                            {% endif %}
                         </td>
                     </tr>
                     {% else %}

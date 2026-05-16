@@ -4,6 +4,8 @@ from datetime import date
 from shared.database.connection import get_connection
 from services.billingo_service.billingo_client import create_spending
 from services.billingo_service.spending_link_repository import SpendingLinkRepository
+from services.billingo_service.api_call_logger import log_api_call
+from services.billingo_service.billingo_client import BillingoApiError
 
 
 STEP_NAME = "CREATE_BILLINGO_SPENDING"
@@ -54,8 +56,18 @@ def create_spendings_for_batch(batch_id: int, force_new_run: bool = False) -> di
             payload = _build_spending_payload(tx)
             response = create_spending(payload)
 
-            billingo_spending_id = _extract_spending_id(response)
+            log_api_call(
+                provider="Billingo",
+                endpoint="/spendings",
+                method="POST",
+                transaction_id=transaction_id,
+                request_payload=payload,
+                response_status=201,
+                response_payload=response,
+                success=True,
+            )
 
+            billingo_spending_id = _extract_spending_id(response)
             repo.create(
                 transaction_id=transaction_id,
                 batch_id=batch_id,
@@ -63,13 +75,40 @@ def create_spendings_for_batch(batch_id: int, force_new_run: bool = False) -> di
                 status="CREATED",
                 raw_response=response,
             )
-
             created.append({
                 "transaction_id": transaction_id,
                 "billingo_spending_id": billingo_spending_id,
             })
 
+        except BillingoApiError as exc:
+            log_api_call(
+                provider="Billingo",
+                endpoint="/spendings",
+                method="POST",
+                transaction_id=transaction_id,
+                request_payload=payload if "payload" in locals() else None,
+                response_status=exc.status_code,
+                response_payload=exc.response_data,
+                success=False,
+                error_message=str(exc),
+            )
+            failed.append({
+                "transaction_id": transaction_id,
+                "error": str(exc),
+            })
+
         except Exception as exc:
+            log_api_call(
+                provider="Billingo",
+                endpoint="/spendings",
+                method="POST",
+                transaction_id=transaction_id,
+                request_payload=payload if "payload" in locals() else None,
+                response_status=None,
+                response_payload=None,
+                success=False,
+                error_message=str(exc),
+            )
             failed.append({
                 "transaction_id": transaction_id,
                 "error": str(exc),

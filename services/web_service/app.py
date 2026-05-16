@@ -1,8 +1,7 @@
 import os
 import json
 import math
-
-from pydantic import BaseModel
+import sqlite3
 
 from fastapi import HTTPException
 from fastapi import FastAPI, Query, Request
@@ -19,7 +18,6 @@ from services.main_service.app import run_pipeline_once
 from services.flow_service.flow_engine import evaluate_transaction
 from services.flow_service.flow_executor import FlowExecutor
 from services.flow_service.purchase_batch_executor import PurchaseBatchExecutor
-from services.payment_batch_service.payment_batch_repository import PaymentBatchRepository
 from services.billingo_service.invoice_link_repository import get_latest_invoice_link
 from services.web_service.template_filters import (
     format_huf,
@@ -29,16 +27,9 @@ from services.web_service.template_filters import (
 
 from google.oauth2.credentials import Credentials
 
-from services.mbh_service.auth import exchange_authorization_code
-from services.mbh_service.token_manager import save_account_token_response
-from services.mbh_service.payment_initiation import create_domestic_payment_consent
-from services.web_service.routers import mbh_account_settings, mbh_account_sync
-
 app = FastAPI(title="CarCOM")
 
 app.mount("/static", StaticFiles(directory="services/web_service/static"), name="static")
-app.include_router(mbh_account_settings.router)
-app.include_router(mbh_account_sync.router)
 templates = Jinja2Templates(directory="services/web_service/templates")
 
 templates.env.filters["format_huf"] = format_huf
@@ -47,7 +38,71 @@ templates.env.filters["format_transaction_type"] = format_transaction_type
 
 
 @app.get("/", response_class=HTMLResponse)
-def dashboard(
+def dashboard(request: Request):
+    conn = get_connection()
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+
+    base_columns = """
+        id,
+        source_row_number,
+        external_id,
+        transaction_date,
+        transaction_type,
+        car_name,
+        partner_name,
+        gross_amount_huf,
+        invoice_status,
+        payment_status,
+        normalized_status
+    """
+
+    cur.execute(f"""
+        SELECT {base_columns}
+        FROM finance_transactions
+        WHERE transaction_type IN ('SALE', 'SALE_STOCK_90_DAYS')
+          AND invoice_status = 'Számlára vár'
+          AND normalized_status = 'VALID'
+        ORDER BY transaction_date DESC, source_row_number DESC
+        LIMIT 50
+    """)
+    invoice_todos = cur.fetchall()
+
+    cur.execute(f"""
+        SELECT {base_columns}
+        FROM finance_transactions
+        WHERE transaction_type IN ('PURCHASE', 'PURCHASE FROM INDIVIDUAL')
+          AND payment_status = 'Fizetésre vár (vétel)'
+          AND normalized_status = 'VALID'
+        ORDER BY transaction_date DESC, source_row_number DESC
+        LIMIT 50
+    """)
+    payment_todos = cur.fetchall()
+
+    cur.execute(f"""
+        SELECT {base_columns}
+        FROM finance_transactions
+        WHERE normalized_status != 'VALID'
+        ORDER BY transaction_date DESC, source_row_number DESC
+        LIMIT 50
+    """)
+    error_todos = cur.fetchall()
+
+    conn.close()
+
+    return templates.TemplateResponse(
+        "dashboard.html",
+        {
+            "request": request,
+            "invoice_todos": invoice_todos,
+            "payment_todos": payment_todos,
+            "error_todos": error_todos,
+            "active_page": "dashboard",
+        },
+    )
+
+@app.get("/transactions", response_class=HTMLResponse)
+def transactions(
         request: Request,
         purchase_page: int = Query(1, ge=1),
         sales_page: int = Query(1, ge=1),
@@ -229,7 +284,7 @@ def dashboard(
     total_pages = 1
 
     return templates.TemplateResponse(
-        "dashboard.html",
+        "transactions.html",
         {
             "request": request,
             "rows": rows,
@@ -248,7 +303,7 @@ def dashboard(
             "status_summary": status_summary,
             "latest_sync_run": latest_sync_run,
             "sync_status": sync_status,
-            "active_page": "dashboard",
+            "active_page": "transactions",
             "purchase_page": purchase_page,
             "purchase_total_pages": purchase_total_pages,
             "purchase_total_count": purchase_total_count,
@@ -257,7 +312,6 @@ def dashboard(
             "sales_total_count": sales_total_count,
         },
     )
-
 
 @app.get("/validation-errors", response_class=HTMLResponse)
 def validation_errors(
@@ -796,6 +850,7 @@ def sync_runs(
             "total_count": total_count,
             "total_pages": total_pages,
             "status": status,
+            "active_page": "sync_runs",
         },
     )
 
@@ -845,7 +900,6 @@ def settings(request: Request):
     for row in lookup_rows:
         grouped_lookup_values.setdefault(row["group_name"], []).append(row)
     google_auth = get_google_oauth_status()
-    mbh_account_info = get_mbh_account_info_status_for_ui()
 
     return templates.TemplateResponse(
         "settings.html",
@@ -857,10 +911,6 @@ def settings(request: Request):
             "integrations": integrations,
             "grouped_lookup_values": grouped_lookup_values,
             "google_auth": google_auth,
-            "mbh_account_info": mbh_account_info,
-            "mbh_auth": request.query_params.get("mbh_auth"),
-            "mbh_status": request.query_params.get("mbh_status"),
-            "mbh_message": request.query_params.get("mbh_message"),
             "google_auth_result": request.query_params.get("google_auth"),
         },
     )
@@ -953,122 +1003,6 @@ def start_google_auth():
         )
 
     return RedirectResponse(url="/settings?google_auth=success", status_code=303)
-
-
-@app.get("/mbh/callback")
-def mbh_callback(request: Request):
-    code = request.query_params.get("code")
-
-    if not code:
-        return RedirectResponse(url="/settings?mbh_auth=failed", status_code=303)
-
-    status, text, _headers = exchange_authorization_code(code)
-
-    if status != 200:
-        return RedirectResponse(url="/settings?mbh_auth=failed", status_code=303)
-
-    save_account_token_response(text)
-
-    return RedirectResponse(url="/settings?mbh_auth=success", status_code=303)
-
-
-class TestDomesticPaymentConsentRequest(BaseModel):
-    amount: str = "1000.00"
-    currency: str = "HUF"
-    creditor_name: str = "Teszt Partner"
-    creditor_scheme_name: str = "HU.CGI"
-    creditor_identification: str
-    reference: str | None = "CARCOM-TEST"
-
-
-@app.post("/experiments/payment/test-domestic-consent")
-def test_domestic_payment_consent(payload: TestDomesticPaymentConsentRequest):
-    status, text, headers = create_domestic_payment_consent(
-        amount=payload.amount,
-        currency=payload.currency,
-        creditor_name=payload.creditor_name,
-        creditor_scheme_name=payload.creditor_scheme_name,
-        creditor_identification=payload.creditor_identification,
-        reference=payload.reference,
-    )
-
-    try:
-
-        response_body = json.loads(text)
-    except Exception:
-        response_body = text
-
-    return {
-        "status_code": status,
-        "response": response_body,
-        "headers": headers,
-    }
-
-
-def get_mbh_account_info_status_for_ui():
-    try:
-        from services.web_service.routers.mbh_account_settings import (
-            get_mbh_account_info_status,
-        )
-
-        status = get_mbh_account_info_status() or {}
-
-    except Exception as exc:
-        status = {
-            "connected": False,
-            "needs_reauth": True,
-            "api_type": "account_info",
-            "message": f"MBH Account Info státusz nem olvasható: {str(exc)}",
-        }
-
-    status.setdefault("connected", False)
-    status.setdefault("needs_reauth", True)
-    status.setdefault("api_type", "account_info")
-    status.setdefault("message", "Az MBH Account Info kapcsolat jelenleg nincs aktív használatban.")
-
-    if status.get("connected"):
-        status.setdefault("ui_status", "success")
-        status.setdefault("ui_label", "Kapcsolódva")
-        status.setdefault("ui_description", "Az MBH Account Info kapcsolat aktív.")
-    elif status.get("needs_reauth"):
-        status.setdefault("ui_status", "warning")
-        status.setdefault("ui_label", "Újrahitelesítés szükséges")
-        status.setdefault("ui_description", status.get("message"))
-    else:
-        status.setdefault("ui_status", "inactive")
-        status.setdefault("ui_label", "Nincs aktív kapcsolat")
-        status.setdefault("ui_description", status.get("message"))
-
-    return status
-
-
-@app.post("/settings/mbh/account-info/create-consent-ui")
-def create_mbh_account_info_consent_ui():
-    from services.web_service.routers.mbh_account_settings import (
-        create_mbh_account_info_consent,
-    )
-
-    create_mbh_account_info_consent()
-
-    return RedirectResponse(
-        url="/settings?mbh_status=consent_created",
-        status_code=303,
-    )
-
-
-@app.post("/settings/mbh/account-info/sync-ui")
-def run_mbh_account_info_sync_ui(days_back: int = 7):
-    from services.web_service.routers.mbh_account_sync import (
-        run_mbh_account_info_sync,
-    )
-
-    run_mbh_account_info_sync(days_back=days_back)
-
-    return RedirectResponse(
-        url="/settings?mbh_status=sync_success",
-        status_code=303,
-    )
-
 
 @app.post("/transactions/{transaction_id}/approve-purchase")
 def approve_purchase_flow(transaction_id: int):

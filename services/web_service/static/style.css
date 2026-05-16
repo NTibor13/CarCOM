@@ -129,6 +129,7 @@ body {
     border-radius: 20px;
     padding: 18px;
     box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+    margin-bottom: 24px;
 }
 
 .filters {
@@ -873,14 +874,6 @@ tbody tr:hover {
     }
 }
 
-.mbh-action-status {
-    margin: 12px 0 18px;
-    padding: 12px 14px;
-    border-radius: 10px;
-    background: #eff6ff;
-    border: 1px solid #bfdbfe;
-    color: #1e3a8a;
-}
 
 .disabled-button,
 button:disabled {

@@ -911,3 +911,51 @@ button:disabled {
 .icon-button.secondary:hover {
     background: #e5e7eb;
 }
+
+.preview-modal.hidden {
+    display: none;
+}
+
+.preview-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+}
+
+.preview-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+}
+
+.preview-modal-content {
+    position: relative;
+    width: min(1100px, calc(100vw - 64px));
+    height: calc(100vh - 64px);
+    margin: 32px auto;
+    background: #5f5f5f;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 24px 80px rgba(15, 23, 42, 0.45);
+}
+
+.preview-modal-header {
+    height: 52px;
+    padding: 0 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #3c3c3c;
+    color: #ffffff;
+}
+
+.icon {
+    color: #ffffff;
+}
+
+.preview-frame {
+    width: 100%;
+    height: calc(100% - 52px);
+    border: 0;
+    background: #2b2b2b;
+}

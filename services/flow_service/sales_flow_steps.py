@@ -1,4 +1,4 @@
-import  json
+import json
 from shared.database.connection import get_connection
 from services.billingo_service.api_call_logger import log_api_call
 from services.billingo_service.billingo_client import (
@@ -6,6 +6,8 @@ from services.billingo_service.billingo_client import (
     create_draft_document,
     get_document,
     download_document,
+    convert_draft_to_invoice,
+    delete_document,
 )
 from services.billingo_service.billingo_payload_builder import build_billingo_payload
 from services.billingo_service.invoice_link_repository import (
@@ -13,6 +15,10 @@ from services.billingo_service.invoice_link_repository import (
     get_active_invoice_link,
     mark_invoice_link_confirmed,
     mark_invoice_link_missing,
+    mark_invoice_link_finalized,
+    mark_invoice_link_superseded,
+    mark_invoice_link_delete_failed,
+
 )
 from services.flow_service.flow_engine import evaluate_transaction
 
@@ -22,7 +28,7 @@ from shared.config.settings import settings
 from services.sync_service.google_drive_client import GoogleDriveClient
 from services.billingo_service.invoice_completion_service import _build_invoice_file_name
 from services.sync_service.google_sheets_client import GoogleSheetsClient
-
+from services.preview_service.sales_invoice_preview import generate_sales_invoice_preview
 
 def create_billingo_draft_step(context: dict) -> dict:
     transaction_id = int(context["transaction_id"])
@@ -253,6 +259,7 @@ def download_document_step(context: dict) -> dict:
         )
         raise
 
+
 def upload_to_drive_step(context: dict) -> dict:
     transaction_id = int(context["transaction_id"])
     transaction = _get_transaction(transaction_id)
@@ -316,9 +323,10 @@ def upload_to_drive_step(context: dict) -> dict:
         "file_name": file_name,
     }
 
+
 def _get_existing_billingo_uploaded_document(
-    transaction_id: int,
-    billingo_document_id: int,
+        transaction_id: int,
+        billingo_document_id: int,
 ) -> dict | None:
     expected_raw_value_prefix = f"billingo_document_id:{billingo_document_id};"
 
@@ -343,6 +351,7 @@ def _get_existing_billingo_uploaded_document(
         row = cur.fetchone()
 
     return dict(row) if row else None
+
 
 def _get_existing_invoice_document(transaction_id: int) -> dict | None:
     with get_connection() as conn:
@@ -369,11 +378,11 @@ def _get_existing_invoice_document(transaction_id: int) -> dict | None:
 
 
 def _create_invoice_document(
-    transaction_id: int,
-    file_name: str,
-    file_url: str,
-    raw_value: str,
-    source_column: str = "Számla link",
+        transaction_id: int,
+        file_name: str,
+        file_url: str,
+        raw_value: str,
+        source_column: str = "Számla link",
 ) -> int:
     with get_connection() as conn:
         cur = conn.cursor()
@@ -405,6 +414,7 @@ def _create_invoice_document(
 
     return document_id
 
+
 def update_sheet_status_step(context: dict) -> dict:
     transaction_id = int(context["transaction_id"])
     transaction = _get_transaction(transaction_id)
@@ -413,8 +423,8 @@ def update_sheet_status_step(context: dict) -> dict:
     target_payment_status = "Kiegyenlítésre vár (eladás)"
 
     if (
-        transaction.get("invoice_status") == target_invoice_status
-        and transaction.get("payment_status") == target_payment_status
+            transaction.get("invoice_status") == target_invoice_status
+            and transaction.get("payment_status") == target_payment_status
     ):
         return {
             "status": "already_updated",
@@ -447,9 +457,9 @@ def update_sheet_status_step(context: dict) -> dict:
 
 
 def _update_local_transaction_status(
-    transaction_id: int,
-    invoice_status: str,
-    payment_status: str,
+        transaction_id: int,
+        invoice_status: str,
+        payment_status: str,
 ) -> None:
     with get_connection() as conn:
         cur = conn.cursor()
@@ -468,6 +478,7 @@ def _update_local_transaction_status(
             ),
         )
         conn.commit()
+
 
 def update_sheet_link_step(context: dict) -> dict:
     transaction_id = int(context["transaction_id"])
@@ -525,6 +536,7 @@ def update_sheet_link_step(context: dict) -> dict:
         "header_name": "Számla link",
     }
 
+
 def _get_upload_to_drive_output(flow_run_id: int) -> dict | None:
     with get_connection() as conn:
         cur = conn.cursor()
@@ -547,6 +559,7 @@ def _get_upload_to_drive_output(flow_run_id: int) -> dict | None:
         return None
 
     return json.loads(row["output_json"])
+
 
 def _get_existing_document_file_ids(transaction_id: int) -> list[str]:
     with get_connection() as conn:
@@ -584,3 +597,171 @@ def _get_existing_document_file_ids(transaction_id: int) -> list[str]:
             file_ids.append(file_id)
 
     return file_ids
+
+
+def convert_billingo_draft_to_invoice_step(context: dict) -> dict:
+    transaction_id = int(context["transaction_id"])
+    active_link = get_active_invoice_link(transaction_id)
+
+    if not active_link:
+        raise RuntimeError(f"No active Billingo draft found for transaction: {transaction_id}")
+
+    if active_link.get("status") == "INVOICE_CREATED":
+        return {
+            "status": "already_finalized",
+            "billingo_document_id": active_link["billingo_document_id"],
+            "billingo_document_number": active_link.get("billingo_document_number"),
+            "invoice_link_id": active_link["id"],
+        }
+
+    billingo_document_id = int(active_link["billingo_document_id"])
+
+    transaction = context.get("transaction")
+    if transaction is None:
+        transaction = _get_transaction(transaction_id)
+
+    payload = build_billingo_payload(
+        transaction,
+        document_type="invoice",
+    )
+
+    try:
+        response = convert_draft_to_invoice(
+            billingo_document_id,
+            payload,
+        )
+
+        api_log_id = log_api_call(
+            provider="Billingo",
+            endpoint=f"/documents/{billingo_document_id}",
+            method="PUT",
+            transaction_id=transaction_id,
+            request_payload=payload,
+            response_status=200,
+            response_payload=response,
+            success=True,
+        )
+
+        billingo_document_number = _extract_billingo_document_number(response)
+
+        mark_invoice_link_finalized(
+            link_id=active_link["id"],
+            billingo_document_number=billingo_document_number,
+            api_log_id=api_log_id,
+        )
+
+        return {
+            "status": "finalized",
+            "billingo_document_id": billingo_document_id,
+            "billingo_document_number": billingo_document_number,
+            "invoice_link_id": active_link["id"],
+            "api_log_id": api_log_id,
+        }
+
+    except BillingoApiError as exc:
+        log_api_call(
+            provider="Billingo",
+            endpoint=f"/documents/{billingo_document_id}",
+            method="PUT",
+            transaction_id=transaction_id,
+            request_payload=payload,
+            response_status=exc.status_code,
+            response_payload=exc.response_data,
+            success=False,
+            error_message=str(exc),
+        )
+        raise
+
+def supersede_existing_draft_for_restart(transaction_id: int) -> dict:
+    active_link = get_active_invoice_link(transaction_id)
+
+    if not active_link:
+        return {
+            "status": "no_active_link",
+            "reason": "No active Billingo draft or invoice link found.",
+        }
+
+    link_status = active_link.get("status")
+    billingo_document_id = int(active_link["billingo_document_id"])
+
+    if link_status == "INVOICE_CREATED":
+        return {
+            "status": "invoice_kept",
+            "reason": "Existing finalized invoice is kept. New flow can create a new draft.",
+            "billingo_document_id": billingo_document_id,
+            "invoice_link_id": active_link["id"],
+        }
+
+    try:
+        response = delete_document(billingo_document_id)
+
+        api_log_id = log_api_call(
+            provider="Billingo",
+            endpoint=f"/documents/{billingo_document_id}",
+            method="DELETE",
+            transaction_id=transaction_id,
+            request_payload=None,
+            response_status=204,
+            response_payload=response,
+            success=True,
+        )
+
+        mark_invoice_link_superseded(active_link["id"], api_log_id)
+
+        return {
+            "status": "draft_deleted_and_superseded",
+            "billingo_document_id": billingo_document_id,
+            "invoice_link_id": active_link["id"],
+            "api_log_id": api_log_id,
+        }
+
+    except BillingoApiError as exc:
+        api_log_id = log_api_call(
+            provider="Billingo",
+            endpoint=f"/documents/{billingo_document_id}",
+            method="DELETE",
+            transaction_id=transaction_id,
+            request_payload=None,
+            response_status=exc.status_code,
+            response_payload=exc.response_data,
+            success=False,
+            error_message=str(exc),
+        )
+
+        if exc.status_code in (404, 410):
+            mark_invoice_link_superseded(active_link["id"], api_log_id)
+            return {
+                "status": "draft_missing_but_superseded",
+                "billingo_document_id": billingo_document_id,
+                "invoice_link_id": active_link["id"],
+                "api_log_id": api_log_id,
+            }
+
+        mark_invoice_link_delete_failed(active_link["id"], api_log_id)
+        raise
+
+def generate_sales_preview_step(context: dict) -> dict:
+    transaction = context.get("transaction")
+
+    if transaction is None:
+        transaction_id = int(context["transaction_id"])
+
+        with get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT * FROM finance_transactions WHERE id = ?",
+                (transaction_id,),
+            )
+            row = cur.fetchone()
+
+        if row is None:
+            raise RuntimeError(f"Transaction not found: {transaction_id}")
+
+        transaction = dict(row)
+
+    preview_path = generate_sales_invoice_preview(transaction)
+
+    return {
+        "status": "success",
+        "preview_path": str(preview_path),
+    }

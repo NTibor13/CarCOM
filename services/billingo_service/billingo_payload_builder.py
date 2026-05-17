@@ -1,7 +1,7 @@
 from datetime import date,datetime,timedelta
 from decimal import Decimal
 
-def build_billingo_payload(tx: dict) -> dict:
+def build_billingo_payload(tx: dict, document_type: str = "draft") -> dict:
     transaction_date = datetime.strptime(tx["transaction_date"], "%Y-%m-%d")
 
     # due date logika
@@ -30,8 +30,8 @@ def build_billingo_payload(tx: dict) -> dict:
     payload = {
         "partner_id": 1851221817,
         "block_id": 156600,
-        "bank_account_id": 0,
-        "type": "draft",
+        "bank_account_id": 229624,
+        "type": document_type,
         "fulfillment_date": transaction_date.strftime("%Y-%m-%d"),
         "due_date": due_date.strftime("%Y-%m-%d"),
         "payment_method": "wire_transfer",
@@ -55,7 +55,7 @@ def build_billingo_payload(tx: dict) -> dict:
             "round": "one",
             "should_send_email": True,
             "no_send_onlineszamla_by_user": False,
-            "selected_type": "draft",
+            "selected_type": document_type,
         },
     }
 

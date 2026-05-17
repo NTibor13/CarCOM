@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <title>CarCOM - Tranzakció részletek</title>
     <link rel="stylesheet" href="/static/style.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
 <div class="app-shell">
@@ -68,24 +69,21 @@
 
                 {% if transaction.flow_action == "SALES_READY" %}
                 <div class="action-panel">
+
+                    {% if not active_invoice_link %}
                     {% if not latest_flow_run %}
                     <form method="post" action="/transactions/{{ transaction.id }}/approve-billingo">
                         <button type="submit" class="primary-button">
-                            Folyamat indítása
+                            Számladraft létrehozása
                         </button>
                     </form>
 
                     {% elif latest_flow_run.status == "FAILED" %}
                     <form method="post" action="/transactions/{{ transaction.id }}/approve-billingo">
                         <button type="submit" class="primary-button">
-                            Folyamat folytatása
+                            Draft létrehozás folytatása
                         </button>
                     </form>
-
-                    {% elif latest_flow_run.status == "SUCCESS" %}
-                    <button type="button" class="floating-button" disabled>
-                        Folyamat kész
-                    </button>
 
                     {% elif latest_flow_run.status == "SKIPPED" %}
                     <button type="button" class="floating-button" disabled>
@@ -95,18 +93,89 @@
                     {% else %}
                     <form method="post" action="/transactions/{{ transaction.id }}/approve-billingo">
                         <button type="submit" class="primary-button">
-                            Folyamat futtatása
+                            Számladraft létrehozása
                         </button>
                     </form>
                     {% endif %}
 
+                    {% elif active_invoice_link.status == "DRAFT_CREATED" %}
+                    <button type="button" class="floating-button" disabled>
+                        Draft létrejött
+                    </button>
+
+                    <form method="post" action="/transactions/{{ transaction.id }}/generate-sales-preview">
+                        <button type="submit" class="secondary-button">
+                            Előnézet újragenerálása
+                        </button>
+                    </form>
+
+                    <a
+                            type="button"
+                            class="secondary-button"
+                            onclick="openPreviewModal()"
+
+                    >
+                        Előnézet megnyitása
+                    </a>
+
+                    <form method="post" action="/transactions/{{ transaction.id }}/finalize-billingo">
+                        <button type="submit" class="primary-button">
+                            Draft jóváhagyása és számla véglegesítése
+                        </button>
+                    </form>
+
+                    {% elif active_invoice_link.status == "INVOICE_CREATED" %}
+                    <button type="button" class="floating-button" disabled>
+                        Számla véglegesítve
+                    </button>
+
+                    {% else %}
+                    <button type="button" class="floating-button" disabled>
+                        Billingo státusz: {{ active_invoice_link.status }}
+                    </button>
+                    {% endif %}
+
                     {% if latest_flow_run and transaction.flow_action == "SALES_READY" %}
-                    <form method="post" action="/transactions/{{ transaction.id }}/rerun-flow">
+
+                    {% if active_invoice_link and active_invoice_link.status == "INVOICE_CREATED" %}
+
+                    <form
+                            method="post"
+                            action="/transactions/{{ transaction.id }}/restart-sales-flow"
+                            onsubmit="return confirm('Erre a tételre már lett számla kiállítva, biztosan szeretne új folyamatot indítani?');"
+                    >
                         <button type="submit" class="secondary-button">
                             Új folyamat indítása
                         </button>
                     </form>
+
+                    {% elif active_invoice_link and active_invoice_link.status == "DRAFT_CREATED" %}
+
+                    <form
+                            method="post"
+                            action="/transactions/{{ transaction.id }}/restart-sales-flow"
+                            onsubmit="return confirm('Ehhez a tételhez már van Billingo draft. Az új draft létrehozása előtt a régi draftot töröljük Billingóban. Folytatja?');"
+                    >
+                        <button type="submit" class="secondary-button">
+                            Új draft generálása
+                        </button>
+                    </form>
+
+                    {% else %}
+
+                    <form
+                            method="post"
+                            action="/transactions/{{ transaction.id }}/restart-sales-flow"
+                    >
+                        <button type="submit" class="secondary-button">
+                            Új folyamat indítása
+                        </button>
+                    </form>
+
                     {% endif %}
+
+                    {% endif %}
+
                 </div>
                 {% endif %}
             </div>
@@ -339,7 +408,45 @@
         </section>
     </main>
 </div>
+
+<div id="previewModal" class="preview-modal hidden">
+    <div class="preview-modal-backdrop" onclick="closePreviewModal()"></div>
+
+    <div class="preview-modal-content">
+        <div class="preview-modal-header">
+            <strong>Számla előnézet</strong>
+
+            <button type="button" class="floating-button" onclick="closePreviewModal()">
+                 <i class="icon" data-lucide="x"></i>
+            </button>
+        </div>
+
+        <iframe
+                id="previewFrame"
+                class="preview-frame"
+                src=""
+        ></iframe>
+    </div>
+</div>
 </body>
+
+<script>
+    function openPreviewModal() {
+        const modal = document.getElementById("previewModal");
+        const frame = document.getElementById("previewFrame");
+
+        frame.src = "/transactions/{{ transaction.id }}/sales-preview?t={{ now_ts }}#zoom=page-width";
+        modal.classList.remove("hidden");
+    }
+
+    function closePreviewModal() {
+        const modal = document.getElementById("previewModal");
+        const frame = document.getElementById("previewFrame");
+
+        frame.src = "";
+        modal.classList.add("hidden");
+    }
+</script>
 <script>
     async function loadFlow() {
         const container = document.getElementById("flow-container");
@@ -438,5 +545,8 @@
     }
 
     loadFlow();
+</script>
+<script>
+    lucide.createIcons();
 </script>
 </html>

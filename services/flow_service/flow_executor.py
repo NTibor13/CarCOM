@@ -1,6 +1,7 @@
 from services.flow_service.flow_repository import FlowRepository
 from services.flow_service.flow_steps import (
     SALE_FLOW_STEPS,
+    SALE_FINALIZE_FLOW_STEPS,
     PURCHASE_FLOW_STEPS,
     STEP_HANDLERS,
 )
@@ -15,6 +16,14 @@ class FlowExecutor:
             transaction_id=transaction_id,
             flow_type="SALE",
             steps=SALE_FLOW_STEPS,
+            force_new_run=force_new_run,
+        )
+
+    def run_sale_finalize_flow(self, transaction_id: int, force_new_run: bool = False) -> dict:
+        return self._run_flow(
+            transaction_id=transaction_id,
+            flow_type="SALE_FINALIZE",
+            steps=SALE_FINALIZE_FLOW_STEPS,
             force_new_run=force_new_run,
         )
 

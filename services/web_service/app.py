@@ -2,6 +2,8 @@ import os
 import json
 import math
 import sqlite3
+from pathlib import Path
+from datetime import datetime
 
 from fastapi import HTTPException
 from fastapi import FastAPI, Query, Request
@@ -17,14 +19,15 @@ from shared.config.settings import settings as app_settings
 from services.main_service.app import run_pipeline_once
 from services.flow_service.flow_engine import evaluate_transaction
 from services.flow_service.flow_executor import FlowExecutor
+from services.flow_service.sales_flow_steps import supersede_existing_draft_for_restart
 from services.flow_service.purchase_batch_executor import PurchaseBatchExecutor
-from services.billingo_service.invoice_link_repository import get_latest_invoice_link
+from services.billingo_service.invoice_link_repository import get_latest_invoice_link, get_active_invoice_link
 from services.web_service.template_filters import (
     format_huf,
     format_vat,
     format_transaction_type,
 )
-
+from services.preview_service.sales_invoice_preview import generate_sales_invoice_preview
 from google.oauth2.credentials import Credentials
 
 app = FastAPI(title="CarCOM")
@@ -100,6 +103,7 @@ def dashboard(request: Request):
             "active_page": "dashboard",
         },
     )
+
 
 @app.get("/transactions", response_class=HTMLResponse)
 def transactions(
@@ -313,6 +317,7 @@ def transactions(
         },
     )
 
+
 @app.get("/validation-errors", response_class=HTMLResponse)
 def validation_errors(
         request: Request,
@@ -506,6 +511,7 @@ def transaction_details(request: Request, transaction_id: int, approval_status: 
         documents = [dict(row) for row in cur.fetchall()]
 
         billingo_invoice_link = get_latest_invoice_link(transaction_id)
+        active_invoice_link = get_active_invoice_link(transaction_id)
 
         cur.execute(
             """
@@ -541,6 +547,8 @@ def transaction_details(request: Request, transaction_id: int, approval_status: 
         payment_batch_info = cur.fetchone()
         payment_batch_info = dict(payment_batch_info) if payment_batch_info else None
 
+
+
     return templates.TemplateResponse(
         "transaction_details.html",
         {
@@ -554,6 +562,8 @@ def transaction_details(request: Request, transaction_id: int, approval_status: 
             "latest_flow_run": latest_flow_run,
             "active_page": "dashboard",
             "payment_batch_info": payment_batch_info,
+            "active_invoice_link": active_invoice_link,
+            "now_ts": int(datetime.now().timestamp()),
         },
     )
 
@@ -1004,6 +1014,7 @@ def start_google_auth():
 
     return RedirectResponse(url="/settings?google_auth=success", status_code=303)
 
+
 @app.post("/transactions/{transaction_id}/approve-purchase")
 def approve_purchase_flow(transaction_id: int):
     init_database()
@@ -1231,4 +1242,105 @@ def download_payment_batch_export(batch_id: int):
         path=row["export_file_path"],
         filename=row["export_file_name"],
         media_type="application/xml",
+    )
+
+@app.post("/transactions/{transaction_id}/finalize-billingo")
+def finalize_billingo_invoice(transaction_id: int):
+    init_database()
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM finance_transactions WHERE id = ?", (transaction_id,))
+        transaction = cur.fetchone()
+
+    if transaction is None:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    result = FlowExecutor().run_sale_finalize_flow(transaction_id)
+
+    return RedirectResponse(
+        url=f"/transactions/{transaction_id}?flow_status={result['status']}",
+        status_code=303,
+    )
+
+@app.post("/transactions/{transaction_id}/restart-sales-flow")
+def restart_sales_flow(transaction_id: int):
+    init_database()
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM finance_transactions WHERE id = ?", (transaction_id,))
+        transaction = cur.fetchone()
+
+    if transaction is None:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    if transaction["flow_action"] != "SALES_READY":
+        raise HTTPException(status_code=400, detail="Transaction is not sales-ready")
+
+    supersede_existing_draft_for_restart(transaction_id)
+
+    result = FlowExecutor().run_sale_flow(
+        transaction_id=transaction_id,
+        force_new_run=True,
+    )
+
+    return RedirectResponse(
+        url=f"/transactions/{transaction_id}?flow_status={result['status']}",
+        status_code=303,
+    )
+
+@app.post("/transactions/{transaction_id}/generate-sales-preview")
+def generate_sales_preview(transaction_id: int):
+    init_database()
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM finance_transactions WHERE id = ?", (transaction_id,))
+        transaction = cur.fetchone()
+
+    if transaction is None:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    preview_path = generate_sales_invoice_preview(dict(transaction))
+
+    return RedirectResponse(
+        url=f"/transactions/{transaction_id}?preview=generated",
+        status_code=303,
+    )
+
+
+@app.get("/transactions/{transaction_id}/sales-preview")
+def open_sales_preview(transaction_id: int):
+    preview_path = (
+        Path(__file__).resolve().parents[2]
+        / "data"
+        / "tmp"
+        / "previews"
+        / f"sales_preview_{transaction_id}.pdf"
+    )
+
+    if not preview_path.exists():
+        raise HTTPException(status_code=404, detail="Preview PDF not found")
+
+    return FileResponse(
+        path=str(preview_path),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="sales_preview_{transaction_id}.pdf"',
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
+
+@app.get("/transactions/{transaction_id}/sales-preview-view")
+def sales_preview_view(request: Request, transaction_id: int):
+    return templates.TemplateResponse(
+        "sales_preview_view.html",
+        {
+            "request": request,
+            "transaction_id": transaction_id,
+            "pdf_url": f"/transactions/{transaction_id}/sales-preview?t={int(datetime.now().timestamp())}#zoom=page-width",
+        },
     )

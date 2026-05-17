@@ -1,7 +1,7 @@
 from shared.database.connection import get_connection
 
 
-ACTIVE_STATUSES = ("DRAFT_CREATED", "DRAFT_CONFIRMED")
+ACTIVE_STATUSES = ("DRAFT_CREATED", "DRAFT_CONFIRMED", "INVOICE_CREATED")
 
 
 def get_latest_invoice_link(transaction_id: int) -> dict | None:
@@ -99,6 +99,64 @@ def mark_invoice_link_missing(link_id: int, api_log_id: int | None = None) -> No
                 api_log_id = COALESCE(?, api_log_id),
                 last_checked_at = CURRENT_TIMESTAMP,
                 missing_detected_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (api_log_id, link_id),
+        )
+        conn.commit()
+
+
+def mark_invoice_link_finalized(
+    link_id: int,
+    billingo_document_number: str | None = None,
+    api_log_id: int | None = None,
+) -> None:
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE billingo_invoice_links
+            SET
+                status = 'INVOICE_CREATED',
+                billingo_document_number = COALESCE(?, billingo_document_number),
+                api_log_id = COALESCE(?, api_log_id),
+                last_checked_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (billingo_document_number, api_log_id, link_id),
+        )
+        conn.commit()
+
+def mark_invoice_link_superseded(link_id: int, api_log_id: int | None = None) -> None:
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE billingo_invoice_links
+            SET
+                status = 'SUPERSEDED',
+                api_log_id = COALESCE(?, api_log_id),
+                last_checked_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (api_log_id, link_id),
+        )
+        conn.commit()
+
+
+def mark_invoice_link_delete_failed(link_id: int, api_log_id: int | None = None) -> None:
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE billingo_invoice_links
+            SET
+                status = 'DRAFT_DELETE_FAILED',
+                api_log_id = COALESCE(?, api_log_id),
+                last_checked_at = CURRENT_TIMESTAMP,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,

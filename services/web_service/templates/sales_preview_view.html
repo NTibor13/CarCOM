@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="hu">
+<head>
+    <meta charset="utf-8">
+    <title>Draft előnézet</title>
+    <style>
+        html, body {
+            margin: 0;
+            height: 100%;
+            background: #f3f4f6;
+        }
+
+        .preview-toolbar {
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+            font-family: Arial, sans-serif;
+        }
+
+        .preview-frame {
+            width: 100%;
+            height: calc(100vh - 56px);
+            border: 0;
+        }
+
+        .btn {
+            text-decoration: none;
+            padding: 10px 16px;
+            border-radius: 10px;
+            background: #2563eb;
+            color: white;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="preview-toolbar">
+        <strong>Számla előnézet</strong>
+
+        <a class="btn" href="/transactions/{{ transaction_id }}">
+            Vissza a tranzakcióhoz
+        </a>
+    </div>
+
+    <iframe
+        class="preview-frame"
+        src="{{ pdf_url }}"
+    ></iframe>
+</body>
+</html>

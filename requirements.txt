@@ -10,3 +10,6 @@ requests
 python-multipart
 PyJWT
 cryptography
+pypdf
+reportlab
+weasyprint

@@ -1,4 +1,5 @@
 import json
+import time
 from shared.database.connection import get_connection
 from services.billingo_service.api_call_logger import log_api_call
 from services.billingo_service.billingo_client import (
@@ -193,72 +194,116 @@ def _extract_billingo_document_number(response: dict) -> str | None:
     return str(value) if value is not None else None
 
 
-def download_document_step(context: dict) -> dict:
-    transaction_id = int(context["transaction_id"])
-    transaction = _get_transaction(transaction_id)
+def download_document_step(
+    transaction_id: int,
+    flow_run_id: int,
+    step_name: str = "DOWNLOAD_DOCUMENT",
+) -> dict:
+    _ = flow_run_id, step_name
+    import time
 
-    active_link = get_active_invoice_link(transaction_id)
-    if not active_link:
-        raise RuntimeError(
-            f"No active Billingo invoice link found for transaction: {transaction_id}"
+    from services.billingo_service.billingo_client import (
+        BillingoApiError,
+        download_document,
+    )
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            SELECT *
+            FROM finance_transactions
+            WHERE id = ?
+            """,
+            (transaction_id,),
         )
+        transaction = cur.fetchone()
 
-    billingo_document_id = int(active_link["billingo_document_id"])
+        if transaction is None:
+            raise ValueError(f"Transaction not found: {transaction_id}")
 
-    try:
-        pdf_content = download_document(billingo_document_id)
+        transaction_id = dict(transaction)
 
-        tmp_dir = Path("data/tmp/invoices")
-        tmp_dir.mkdir(parents=True, exist_ok=True)
-
-        file_name = _build_invoice_file_name(
-            transaction=transaction,
-            billingo_document_id=billingo_document_id,
-            billingo_document_number=active_link.get("billingo_document_number"),
+        cur.execute(
+            """
+            SELECT *
+            FROM billingo_invoice_links
+            WHERE transaction_id = ?
+              AND status = 'INVOICE_CREATED'
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (transaction_id,),
         )
+        active_link = cur.fetchone()
 
-        file_path = tmp_dir / file_name
-        file_path.write_bytes(pdf_content)
+        if active_link is None:
+            raise ValueError(
+                f"No finalized Billingo invoice found for transaction_id={transaction_id}"
+            )
 
-        api_log_id = log_api_call(
-            provider="Billingo",
-            endpoint=f"/documents/{billingo_document_id}/download",
-            method="GET",
-            transaction_id=transaction_id,
-            request_payload=None,
-            response_status=200,
-            response_payload={
-                "content_type": "application/pdf",
-                "size_bytes": len(pdf_content),
-                "file_path": str(file_path),
-            },
-            success=True,
-        )
+        active_link = dict(active_link)
 
-        return {
-            "status": "downloaded",
-            "billingo_document_id": billingo_document_id,
-            "invoice_link_id": active_link["id"],
-            "api_log_id": api_log_id,
-            "size_bytes": len(pdf_content),
-            "file_name": file_name,
-            "file_path": str(file_path),
-        }
+    billingo_document_id = active_link["billingo_document_id"]
 
-    except BillingoApiError as exc:
-        log_api_call(
-            provider="Billingo",
-            endpoint=f"/documents/{billingo_document_id}/download",
-            method="GET",
-            transaction_id=transaction_id,
-            request_payload=None,
-            response_status=exc.status_code,
-            response_payload=exc.response_data,
-            success=False,
-            error_message=str(exc),
-        )
-        raise
+    max_attempts = 5
+    sleep_seconds = 3
+    pdf_content = None
+    last_error: BillingoApiError | None = None
 
+    for attempt in range(1, max_attempts + 1):
+        try:
+            pdf_content = download_document(billingo_document_id)
+            break
+
+        except BillingoApiError as exc:
+            last_error = exc
+
+            log_api_call(
+                provider="Billingo",
+                endpoint=f"/documents/{billingo_document_id}/download",
+                method="GET",
+                transaction_id=transaction_id,
+                request_payload={
+                    "attempt": attempt,
+                    "max_attempts": max_attempts,
+                },
+                response_status=exc.status_code,
+                response_payload=exc.response_data,
+                success=False,
+                error_message=str(exc),
+            )
+
+            if exc.status_code != 202 or attempt == max_attempts:
+                raise
+
+            time.sleep(sleep_seconds)
+
+    if pdf_content is None:
+        raise last_error or RuntimeError("Billingo document download failed")
+
+    tmp_dir = Path("data/tmp/invoices")
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+
+    file_name = _build_invoice_file_name(
+        transaction=transaction,
+        billingo_document_id=billingo_document_id,
+        billingo_document_number=active_link["billingo_document_number"],
+    )
+
+    file_path = tmp_dir / file_name
+    file_path.write_bytes(pdf_content)
+
+    return {
+        "status": "success",
+        "reason": "billingo_invoice_pdf_downloaded",
+        "transaction_id": transaction_id,
+        "billingo_document_id": billingo_document_id,
+        "file_name": file_name,
+        "file_path": str(file_path),
+        "attempts": attempt,
+    }
 
 def upload_to_drive_step(context: dict) -> dict:
     transaction_id = int(context["transaction_id"])

@@ -67,38 +67,36 @@
             <div class="flow-side">
                 <span class="flow-badge">Kiszámlázható</span>
 
-                {% if transaction.flow_action == "SALES_READY" %}
                 <div class="action-panel">
 
-                    {% if not active_invoice_link %}
-                    {% if not latest_flow_run %}
-                    <form method="post" action="/transactions/{{ transaction.id }}/approve-billingo">
+                    {% if latest_flow_run and latest_flow_run.status == "FAILED" %}
+
+                    <form method="post" action="/transactions/{{ transaction.id }}/continue-sales-flow">
                         <button type="submit" class="primary-button">
-                            Számladraft létrehozása
+                            Folyamat folytatása
                         </button>
                     </form>
 
-                    {% elif latest_flow_run.status == "FAILED" %}
-                    <form method="post" action="/transactions/{{ transaction.id }}/approve-billingo">
-                        <button type="submit" class="primary-button">
-                            Draft létrehozás folytatása
-                        </button>
-                    </form>
-
-                    {% elif latest_flow_run.status == "SKIPPED" %}
+                    {% if active_invoice_link and active_invoice_link.status == "INVOICE_CREATED" %}
                     <button type="button" class="floating-button" disabled>
-                        Folyamat kihagyva
+                        Számla véglegesítve, de a folyamat hibára futott
                     </button>
-
-                    {% else %}
-                    <form method="post" action="/transactions/{{ transaction.id }}/approve-billingo">
-                        <button type="submit" class="primary-button">
-                            Számladraft létrehozása
-                        </button>
-                    </form>
+                    {% elif active_invoice_link and active_invoice_link.status == "DRAFT_CREATED" %}
+                    <button type="button" class="floating-button" disabled>
+                        Draft létrejött, de a folyamat hibára futott
+                    </button>
                     {% endif %}
 
+                    {% elif not active_invoice_link %}
+
+                    <form method="post" action="/transactions/{{ transaction.id }}/approve-billingo">
+                        <button type="submit" class="primary-button">
+                            Számladraft létrehozása
+                        </button>
+                    </form>
+
                     {% elif active_invoice_link.status == "DRAFT_CREATED" %}
+
                     <button type="button" class="floating-button" disabled>
                         Draft létrejött
                     </button>
@@ -109,47 +107,15 @@
                         </button>
                     </form>
 
-                    <a
-                            type="button"
-                            class="secondary-button"
-                            onclick="openPreviewModal()"
-
-                    >
+                    <button type="button" class="secondary-button" onclick="openPreviewModal()">
                         Előnézet megnyitása
-                    </a>
+                    </button>
 
                     <form method="post" action="/transactions/{{ transaction.id }}/finalize-billingo">
                         <button type="submit" class="primary-button">
                             Draft jóváhagyása és számla véglegesítése
                         </button>
                     </form>
-
-                    {% elif active_invoice_link.status == "INVOICE_CREATED" %}
-                    <button type="button" class="floating-button" disabled>
-                        Számla véglegesítve
-                    </button>
-
-                    {% else %}
-                    <button type="button" class="floating-button" disabled>
-                        Billingo státusz: {{ active_invoice_link.status }}
-                    </button>
-                    {% endif %}
-
-                    {% if latest_flow_run and transaction.flow_action == "SALES_READY" %}
-
-                    {% if active_invoice_link and active_invoice_link.status == "INVOICE_CREATED" %}
-
-                    <form
-                            method="post"
-                            action="/transactions/{{ transaction.id }}/restart-sales-flow"
-                            onsubmit="return confirm('Erre a tételre már lett számla kiállítva, biztosan szeretne új folyamatot indítani?');"
-                    >
-                        <button type="submit" class="secondary-button">
-                            Új folyamat indítása
-                        </button>
-                    </form>
-
-                    {% elif active_invoice_link and active_invoice_link.status == "DRAFT_CREATED" %}
 
                     <form
                             method="post"
@@ -161,24 +127,33 @@
                         </button>
                     </form>
 
-                    {% else %}
+                    {% elif active_invoice_link.status == "INVOICE_CREATED" %}
+
+                    <button type="button" class="floating-button" disabled>
+                        Számla véglegesítve
+                    </button>
 
                     <form
                             method="post"
                             action="/transactions/{{ transaction.id }}/restart-sales-flow"
+                            onsubmit="return confirm('Erre a tételre már lett számla kiállítva, biztosan szeretne új folyamatot indítani?');"
                     >
                         <button type="submit" class="secondary-button">
                             Új folyamat indítása
                         </button>
                     </form>
 
-                    {% endif %}
+                    {% else %}
+
+                    <button type="button" class="floating-button" disabled>
+                        Billingo státusz: {{ active_invoice_link.status }}
+                    </button>
 
                     {% endif %}
 
                 </div>
-                {% endif %}
             </div>
+
             {% if approval_status == "approved" %}
             <div class="flow-message flow-message-success">
                 A Billingo számla elkészült, a számlakép feltöltésre került Google Drive-ra, a Google Sheet státuszai
@@ -197,61 +172,10 @@
                 A Billingo számladraft létrehozása sikertelen volt. Részletek a szerver logban.
             </div>
             {% endif %}
-        </section>
-        {% endif %}
-
-        {% if transaction.flow_action == "PURCHASE_PAYMENT_READY" %}
-        <section class="flow-block">
-            <div class="flow-content">
-                <div class="flow-icon">✓</div>
-
-                <div class="flow-text">
-                    <p class="flow-kicker">Vásárlási folyamat</p>
-                    <h2>Ez a tranzakció kifizethető</h2>
-                    <p>
-                        Az adatok megfelelnek a banki köteg léterhozás feltételeinek.
-                    </p>
-                </div>
-            </div>
-
-            <div class="flow-side">
-                <span class="flow-badge">Kifizethető</span>
-                {% if transaction.flow_action == "PURCHASE_PAYMENT_READY" %}
-                <div class="action-panel">
-                    <form method="post" action="/transactions/{{ transaction.id }}/approve-purchase">
-                        <button class="primary-button" type="submit">
-                            Vásárlási folyamat jóváhagyása és indítása
-                        </button>
-                    </form>
-                </div>
-                {% elif latest_flow_run.status == "SUCCESS" %}
-                <button type="button" class="floating-button" disabled>
-                    Folyamat kész
-                </button>
-                {% elif latest_flow_run.status == "SKIPPED" %}
-                <button type="button" class="floating-button" disabled>
-                    Folyamat kihagyva
-                </button>
-                {% else %}
-                <form method="post" action="/transactions/{{ transaction.id }}/approve-purchase">
-                    <button type="submit" class="primary-button">
-                        Folyamat futtatása
-                    </button>
-                </form>
-                {% endif %}
-                {% if latest_flow_run and transaction.flow_action == "PURCHASE_PAYMENT_READY" %}
-                <form method="post" action="/transactions/{{ transaction.id }}/rerun-flow">
-                    <button type="submit" class="secondary-button">
-                        Új folyamat indítása
-                    </button>
-                </form>
-                {% endif %}
-            </div>
-
 
         </section>
-
         {% endif %}
+        
         <section class="panel flow-timeline-panel" id="flow-container" data-transaction-id="{{ transaction.id }}">
             <div class="section-header">
                 <div>
@@ -417,7 +341,7 @@
             <strong>Számla előnézet</strong>
 
             <button type="button" class="floating-button" onclick="closePreviewModal()">
-                 <i class="icon" data-lucide="x"></i>
+                <i class="icon" data-lucide="x"></i>
             </button>
         </div>
 
@@ -535,6 +459,8 @@
     function getStepLabel(stepName) {
         const labels = {
             CREATE_BILLINGO_DRAFT: "Billingo piszkozat létrehozása",
+            GENERATE_SALES_PREVIEW: "Előnézet generálása",
+            CONVERT_BILLINGO_DRAFT_TO_INVOICE: "Számla kiállítása",
             DOWNLOAD_DOCUMENT: "Számlakép letöltése",
             UPLOAD_TO_DRIVE: "Feltöltés Google Drive-ra",
             UPDATE_SHEET_STATUS: "Google Sheet státusz frissítése",

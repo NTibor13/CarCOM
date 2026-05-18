@@ -6,6 +6,7 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 from weasyprint import HTML, CSS
+import logging
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -17,6 +18,7 @@ TEMPLATE_KAFA = "minta_elonezet_KAFA.html"
 
 CSS_FILE = SAMPLE_DIR / "samples.css"
 
+logging.getLogger("weasyprint").setLevel(logging.ERROR)
 
 def generate_sales_invoice_preview(transaction: dict[str, Any]) -> Path:
     PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
@@ -39,7 +41,7 @@ def generate_sales_invoice_preview(transaction: dict[str, Any]) -> Path:
     issue_date = date.today()
 
     due_date = _calculate_due_date(
-        transaction_date=transaction_date,
+        issue_date=issue_date,
         source_cost_center=transaction.get("source_cost_center"),
         transaction_type=transaction.get("transaction_type"),
     )
@@ -75,11 +77,6 @@ def generate_sales_invoice_preview(transaction: dict[str, Any]) -> Path:
 
     return output_path
 
-    if result.err:
-        raise RuntimeError("Sales invoice preview PDF generation failed")
-
-    return output_path
-
 
 def _select_template(vat_rate: float) -> str:
     if vat_rate == 0:
@@ -92,7 +89,7 @@ def _select_template(vat_rate: float) -> str:
 
 
 def _calculate_due_date(
-    transaction_date: date,
+    issue_date: date,
     source_cost_center: str | None,
     transaction_type: str | None,
 ) -> date:
@@ -100,9 +97,9 @@ def _calculate_due_date(
         source_cost_center == "Eladás készlet 90 nap"
         or transaction_type == "SALE_STOCK_90_DAYS"
     ):
-        return transaction_date + timedelta(days=90)
+        return issue_date + timedelta(days=90)
 
-    return transaction_date + timedelta(days=8)
+    return issue_date + timedelta(days=8)
 
 
 def _parse_date(value: Any) -> date:

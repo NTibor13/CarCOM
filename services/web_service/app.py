@@ -39,9 +39,11 @@ templates.env.filters["format_huf"] = format_huf
 templates.env.filters["format_vat"] = format_vat
 templates.env.filters["format_transaction_type"] = format_transaction_type
 
+
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     return FileResponse("services/web_service/static/favicon.ico")
+
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
@@ -111,14 +113,14 @@ def dashboard(request: Request):
 @app.get("/transactions", response_class=HTMLResponse)
 def transactions(
         request: Request,
-        purchase_page: int = Query(1, ge=1),
-        sales_page: int = Query(1, ge=1),
+        page: int = Query(1, ge=1),
         search: str = "",
         sort_by: str = "source_row_number",
         sort_dir: str = "desc",
         transaction_type: str = "",
         normalized_status: str = "",
         sync_status: str = "",
+        view: str = "all",
 ):
     init_database()
 
@@ -139,6 +141,9 @@ def transactions(
         sort_by = "source_row_number"
 
     sort_dir = "asc" if sort_dir.lower() == "asc" else "desc"
+
+    if view not in ("all", "purchase", "sales"):
+        view = "all"
 
     where_clauses = []
     params = []
@@ -171,16 +176,6 @@ def transactions(
 
     with get_connection() as conn:
         cur = conn.cursor()
-
-        cur.execute(
-            f"""
-            SELECT COUNT(*) AS count
-            FROM finance_transactions
-            {where_sql}
-            """,
-            params,
-        )
-        total_count = int(cur.fetchone()["count"])
 
         cur.execute(
             f"""
@@ -219,39 +214,34 @@ def transactions(
             row_dict["flow_reason"] = flow_result["reason"]
             rows.append(row_dict)
 
-        all_purchase_rows = [
-            row for row in rows
-            if row.get("transaction_type") in (
-                "PURCHASE",
-                "PURCHASE FROM INDIVIDUAL",
-            )
-        ]
+        total_count = len(rows)
 
-        all_sales_rows = [
-            row for row in rows
-            if row.get("transaction_type") in (
-                "SALE",
-                "SALE_STOCK_90_DAYS",
-            )
-        ]
+        if view == "purchase":
+            visible_all_rows = [
+                row for row in rows
+                if row.get("transaction_type") in (
+                    "PURCHASE",
+                    "PURCHASE FROM INDIVIDUAL",
+                )
+            ]
+        elif view == "sales":
+            visible_all_rows = [
+                row for row in rows
+                if row.get("transaction_type") in (
+                    "SALE",
+                    "SALE_STOCK_90_DAYS",
+                )
+            ]
+        else:
+            visible_all_rows = rows
 
-        purchase_total_count = len(all_purchase_rows)
-        sales_total_count = len(all_sales_rows)
+        visible_total_count = len(visible_all_rows)
+        total_pages = max(1, math.ceil(visible_total_count / page_size))
+        page = max(1, min(page, total_pages))
 
-        purchase_total_pages = max(1, math.ceil(purchase_total_count / page_size))
-        sales_total_pages = max(1, math.ceil(sales_total_count / page_size))
-
-        purchase_page = max(1, min(purchase_page, purchase_total_pages))
-        sales_page = max(1, min(sales_page, sales_total_pages))
-
-        purchase_start = (purchase_page - 1) * page_size
-        purchase_end = purchase_start + page_size
-
-        sales_start = (sales_page - 1) * page_size
-        sales_end = sales_start + page_size
-
-        purchase_rows = all_purchase_rows[purchase_start:purchase_end]
-        sales_rows = all_sales_rows[sales_start:sales_end]
+        start = (page - 1) * page_size
+        end = start + page_size
+        visible_rows = visible_all_rows[start:end]
 
         cur.execute("""
             SELECT transaction_type, COUNT(*) AS count
@@ -288,18 +278,16 @@ def transactions(
         latest_sync_run = cur.fetchone()
         latest_sync_run = dict(latest_sync_run) if latest_sync_run else None
 
-    total_pages = 1
-
     return templates.TemplateResponse(
         "transactions.html",
         {
             "request": request,
             "rows": rows,
-            "purchase_rows": purchase_rows,
-            "sales_rows": sales_rows,
-            "page": 1,
+            "visible_rows": visible_rows,
+            "page": page,
             "page_size": page_size,
             "total_count": total_count,
+            "visible_total_count": visible_total_count,
             "total_pages": total_pages,
             "search": search,
             "sort_by": sort_by,
@@ -311,12 +299,7 @@ def transactions(
             "latest_sync_run": latest_sync_run,
             "sync_status": sync_status,
             "active_page": "transactions",
-            "purchase_page": purchase_page,
-            "purchase_total_pages": purchase_total_pages,
-            "purchase_total_count": purchase_total_count,
-            "sales_page": sales_page,
-            "sales_total_pages": sales_total_pages,
-            "sales_total_count": sales_total_count,
+            "view": view,
         },
     )
 
@@ -549,8 +532,6 @@ def transaction_details(request: Request, transaction_id: int, approval_status: 
         )
         payment_batch_info = cur.fetchone()
         payment_batch_info = dict(payment_batch_info) if payment_batch_info else None
-
-
 
     return templates.TemplateResponse(
         "transaction_details.html",
@@ -1247,6 +1228,7 @@ def download_payment_batch_export(batch_id: int):
         media_type="application/xml",
     )
 
+
 @app.post("/transactions/{transaction_id}/finalize-billingo")
 def finalize_billingo_invoice(transaction_id: int):
     init_database()
@@ -1265,6 +1247,7 @@ def finalize_billingo_invoice(transaction_id: int):
         url=f"/transactions/{transaction_id}?flow_status={result['status']}",
         status_code=303,
     )
+
 
 @app.post("/transactions/{transaction_id}/restart-sales-flow")
 def restart_sales_flow(transaction_id: int):
@@ -1296,6 +1279,7 @@ def restart_sales_flow(transaction_id: int):
         status_code=303,
     )
 
+
 @app.post("/transactions/{transaction_id}/generate-sales-preview")
 def generate_sales_preview(transaction_id: int):
     init_database()
@@ -1319,11 +1303,11 @@ def generate_sales_preview(transaction_id: int):
 @app.get("/transactions/{transaction_id}/sales-preview")
 def open_sales_preview(transaction_id: int):
     preview_path = (
-        Path(__file__).resolve().parents[2]
-        / "data"
-        / "tmp"
-        / "previews"
-        / f"sales_preview_{transaction_id}.pdf"
+            Path(__file__).resolve().parents[2]
+            / "data"
+            / "tmp"
+            / "previews"
+            / f"sales_preview_{transaction_id}.pdf"
     )
 
     if not preview_path.exists():
@@ -1340,6 +1324,7 @@ def open_sales_preview(transaction_id: int):
         },
     )
 
+
 @app.get("/transactions/{transaction_id}/sales-preview-view")
 def sales_preview_view(request: Request, transaction_id: int):
     return templates.TemplateResponse(
@@ -1350,6 +1335,7 @@ def sales_preview_view(request: Request, transaction_id: int):
             "pdf_url": f"/transactions/{transaction_id}/sales-preview?t={int(datetime.now().timestamp())}#zoom=page-width",
         },
     )
+
 
 @app.post("/transactions/{transaction_id}/continue-sales-flow")
 def continue_sales_flow(transaction_id: int):

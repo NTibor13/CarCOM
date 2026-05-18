@@ -15,7 +15,7 @@
     <main class="main">
         <header class="topbar">
             <div>
-                <h1>{{ transaction.car_name or "Tranzakció részletek" }}</h1>
+                <h1 class="page-title">{{ transaction.car_name or "Tranzakció részletek" }}</h1>
                 <div class="internal-id">
                     Internal ID: {{ transaction.id }}
                 </div>
@@ -175,7 +175,7 @@
 
         </section>
         {% endif %}
-        
+
         <section class="panel flow-timeline-panel" id="flow-container" data-transaction-id="{{ transaction.id }}">
             <div class="section-header">
                 <div>

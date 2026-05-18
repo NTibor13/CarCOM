@@ -194,18 +194,8 @@ def _extract_billingo_document_number(response: dict) -> str | None:
     return str(value) if value is not None else None
 
 
-def download_document_step(
-    transaction_id: int,
-    flow_run_id: int,
-    step_name: str = "DOWNLOAD_DOCUMENT",
-) -> dict:
-    _ = flow_run_id, step_name
-    import time
-
-    from services.billingo_service.billingo_client import (
-        BillingoApiError,
-        download_document,
-    )
+def download_document_step(context: dict) -> dict:
+    transaction_id = int(context["transaction_id"])
 
     with get_connection() as conn:
         cur = conn.cursor()
@@ -223,7 +213,7 @@ def download_document_step(
         if transaction is None:
             raise ValueError(f"Transaction not found: {transaction_id}")
 
-        transaction_id = dict(transaction)
+        transaction = dict(transaction)
 
         cur.execute(
             """
@@ -314,7 +304,8 @@ def upload_to_drive_step(context: dict) -> dict:
         raise RuntimeError(
             f"No active Billingo invoice link found for transaction: {transaction_id}"
         )
-
+    active_link = dict(active_link)
+    
     billingo_document_id = int(active_link["billingo_document_id"])
 
     existing_billingo_upload = _get_existing_billingo_uploaded_document(

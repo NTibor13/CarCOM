@@ -1355,90 +1355,12 @@ def sales_preview_view(request: Request, transaction_id: int):
 def continue_sales_flow(transaction_id: int):
     init_database()
 
-    from services.flow_service.sales_flow_steps import (
-        download_document_step,
-        upload_to_drive_step,
-        update_sheet_status_step,
-        update_sheet_link_step,
+    result = FlowExecutor().run_sale_finalize_flow(
+        transaction_id=transaction_id,
+        force_new_run=False,
     )
 
-    with get_connection() as conn:
-        cur = conn.cursor()
-
-        cur.execute(
-            """
-            SELECT *
-            FROM flow_runs
-            WHERE transaction_id = ?
-              AND flow_type = 'SALE'
-            ORDER BY id DESC
-            LIMIT 1
-            """,
-            (transaction_id,),
-        )
-        flow_run = cur.fetchone()
-
-        if flow_run is None:
-            return RedirectResponse(
-                url=f"/transactions/{transaction_id}?approval_status=no_flow",
-                status_code=303,
-            )
-
-        flow_run_id = int(flow_run["id"])
-
-    context = {
-        "transaction_id": transaction_id,
-        "flow_run_id": flow_run_id,
-    }
-
-    try:
-        download_result = download_document_step(
-            transaction_id=transaction_id,
-            flow_run_id=flow_run_id,
-            step_name="DOWNLOAD_DOCUMENT",
-        )
-
-        context["DOWNLOAD_DOCUMENT"] = download_result
-
-        upload_result = upload_to_drive_step(context)
-        context["UPLOAD_TO_DRIVE"] = upload_result
-
-        update_status_result = update_sheet_status_step(context)
-        context["UPDATE_SHEET_STATUS"] = update_status_result
-
-        update_link_result = update_sheet_link_step(context)
-        context["UPDATE_SHEET_LINK"] = update_link_result
-
-        with get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                UPDATE flow_runs
-                SET status = 'SUCCESS',
-                    finished_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
-                (flow_run_id,),
-            )
-            conn.commit()
-
-        return RedirectResponse(
-            url=f"/transactions/{transaction_id}?flow_status=success",
-            status_code=303,
-        )
-
-    except Exception:
-        with get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                UPDATE flow_runs
-                SET status = 'FAILED',
-                    finished_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
-                (flow_run_id,),
-            )
-            conn.commit()
-
-        raise
+    return RedirectResponse(
+        url=f"/transactions/{transaction_id}?flow_status={result['status']}",
+        status_code=303,
+    )
